@@ -5,47 +5,108 @@ import PyPDF2
 import os
 import shutil
 
-# --- 1. CẤU HÌNH HỆ THỐNG ---
-st.set_page_config(layout="wide", page_title="Kho Học Liệu & Tạo Đề - Thầy Khánh")
+# --- 1. CẤU HÌNH TRANG & GIAO DIỆN LỄ HỘI ---
+st.set_page_config(
+    layout="wide", 
+    page_title="Tạo Đề Thi 2026 - Thầy Khánh",
+    page_icon="🎄"
+)
 
-# THƯ MỤC GỐC ĐỂ LƯU TRỮ (Thầy có thể đổi tên folder này)
-BASE_DIR = "KHO_DU_LIEU_GD"
+# CSS TÙY CHỈNH (Màu sắc Giáng sinh & Năm mới)
+st.markdown("""
+<style>
+    /* 1. Hiệu ứng tiêu đề rực rỡ */
+    .main-header {
+        font-size: 40px; 
+        font-weight: bold; 
+        color: #D42426; /* Màu đỏ giáng sinh */
+        text-align: center; 
+        text-shadow: 2px 2px #FFD700; /* Bóng vàng kim loại */
+        margin-bottom: 10px;
+        padding: 20px;
+        border-bottom: 3px solid #146B3A; /* Viền xanh thông */
+    }
+    
+    /* 2. Style cho các tiêu đề phụ */
+    .sub-header {
+        color: #146B3A; /* Xanh lá đậm */
+        font-weight: bold;
+        font-size: 20px;
+        margin-top: 20px;
+    }
 
-# --- CẤU HÌNH API KEY (Sửa lại đoạn này) ---
-import os
+    /* 3. Nút bấm đẹp mắt */
+    .stButton>button {
+        background-color: #D42426; /* Nút màu đỏ */
+        color: white; 
+        font-size: 18px; 
+        font-weight: bold; 
+        border-radius: 10px;
+        border: 2px solid #FFD700;
+        width: 100%;
+    }
+    .stButton>button:hover {
+        background-color: #146B3A; /* Di chuột vào chuyển màu xanh */
+        color: #FFD700;
+    }
 
-# Kiểm tra xem đang chạy trên mạng (Secrets) hay ở máy nhà
+    /* 4. Footer cố định dưới đáy */
+    .footer {
+        position: fixed;
+        left: 0;
+        bottom: 0;
+        width: 100%;
+        background-color: #146B3A;
+        color: white;
+        text-align: center;
+        padding: 10px;
+        font-size: 14px;
+        font-weight: bold;
+        z-index: 999;
+    }
+    
+    /* 5. Khung hướng dẫn */
+    .instruction-box {
+        background-color: #f0fdf4;
+        border: 1px solid #146B3A;
+        padding: 15px;
+        border-radius: 10px;
+        margin-bottom: 20px;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# --- 2. XỬ LÝ API KEY (BẢO MẬT) ---
+# Tự động lấy key từ Secrets (Online) hoặc biến tạm (Offline)
 if "GOOGLE_API_KEY" in st.secrets:
     api_key = st.secrets["GOOGLE_API_KEY"]
 else:
-    # Nếu chạy ở máy nhà mà không có secrets, Thầy có thể điền tạm key vào đây để test
-    api_key = "MÃ_KEY_CỦA_THẦY_NẾU_CHẠY_OFFLINE"
+    # Key dự phòng khi chạy trên máy cá nhân
+    api_key = "DIEN_KEY_CUA_THAY_VAO_DAY_NEU_CHAY_OFFLINE"
 
-genai.configure(api_key=api_key)
+try:
+    genai.configure(api_key=api_key)
+except Exception as e:
+    st.error(f"Lỗi cấu hình API: {e}")
 
-# --- 2. CÁC HÀM XỬ LÝ FILE HỆ THỐNG ---
+# --- 3. CÁC HÀM XỬ LÝ (GIỮ NGUYÊN LOGIC CŨ) ---
+BASE_DIR = "KHO_DU_LIEU_GD"
 
 def get_folder_path(cap_hoc, lop_hoc, mon_hoc):
-    """Tạo đường dẫn thư mục: KHO/Cap/Lop/Mon"""
-    # Xử lý tên để tạo folder không dấu, tránh lỗi
     path = os.path.join(BASE_DIR, cap_hoc, lop_hoc, mon_hoc)
     if not os.path.exists(path):
-        os.makedirs(path) # Tự tạo thư mục nếu chưa có
+        os.makedirs(path)
     return path
 
 def save_uploaded_file(uploaded_file, target_folder):
-    """Lưu file vào thư mục và kiểm tra trùng lặp"""
     file_path = os.path.join(target_folder, uploaded_file.name)
-    
     if os.path.exists(file_path):
-        return False, f"⚠️ File '{uploaded_file.name}' đã có trong kho dữ liệu cũ. Đã bỏ qua upload."
-    
+        return False, f"⚠️ File '{uploaded_file.name}' đã có trong kho dữ liệu. Đã bỏ qua."
     with open(file_path, "wb") as f:
         f.write(uploaded_file.getbuffer())
-    return True, f"✅ Đã lưu mới: {uploaded_file.name}"
+    return True, f"✅ Đã lưu: {uploaded_file.name}"
 
 def read_doc_text(file_path):
-    """Đọc nội dung text từ đường dẫn file trong máy"""
     text = ""
     try:
         if file_path.endswith('.docx'):
@@ -56,105 +117,114 @@ def read_doc_text(file_path):
                 pdf_reader = PyPDF2.PdfReader(f)
                 for page in pdf_reader.pages:
                     text += page.extract_text()
-    except Exception as e:
-        print(f"Lỗi đọc file {file_path}: {e}")
+    except: pass
     return text
 
 def get_all_context(folder_path):
-    """Lấy toàn bộ nội dung của tất cả các file trong thư mục"""
     all_text = ""
     files = [f for f in os.listdir(folder_path) if f.endswith(('.docx', '.pdf', '.txt'))]
-    
-    if not files:
-        return "", []
-        
     for file_name in files:
         full_path = os.path.join(folder_path, file_name)
-        all_text += f"\n--- Tài liệu: {file_name} ---\n"
-        all_text += read_doc_text(full_path)
-        
+        all_text += f"\n--- Tài liệu: {file_name} ---\n{read_doc_text(full_path)}"
     return all_text, files
 
-# --- 3. HÀM AI ---
-def get_smart_model():
-    """Tự động chọn Model AI"""
-    try:
-        ds_model = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        uu_tien = ['models/gemini-1.5-flash', 'models/gemini-1.5-pro', 'models/gemini-pro']
-        for m in uu_tien:
-            if m in ds_model: return m
-        return ds_model[0] if ds_model else None
-    except: return None
-
-def generate_test(mon, lop, loai, context, model_name):
-    model = genai.GenerativeModel(model_name)
+def generate_test_final(mon, lop, loai, context):
+    # Dùng model ổn định nhất
+    model = genai.GenerativeModel('gemini-1.5-flash')
+    
     prompt = f"""
-    Vai trò: Giáo viên bộ môn {mon} lớp {lop}.
+    Vai trò: Giáo viên bộ môn {mon} lớp {lop} tại Việt Nam.
     Nhiệm vụ: Soạn đề kiểm tra {loai}.
-    Yêu cầu: Có Ma trận, Trắc nghiệm, Tự luận, Đáp án.
-    Tài liệu tham khảo (Nội dung giảng dạy):
+    Yêu cầu:
+    1. Cấu trúc: Trắc nghiệm (4 câu) + Tự luận/Thực hành (2 câu).
+    2. Nội dung: Bám sát tài liệu cung cấp bên dưới.
+    3. Định dạng: Có Ma trận đề, Đề bài và Đáp án chi tiết.
+    
+    Tài liệu tham khảo:
     {context}
     """
     return model.generate_content(prompt).text
 
-# --- 4. GIAO DIỆN NGƯỜI DÙNG ---
-st.markdown('<h2 style="text-align: center; color: #004aad;">🗄️ KHO HỌC LIỆU SỐ & TẠO ĐỀ KIỂM TRA</h2>', unsafe_allow_html=True)
+# --- 4. GIAO DIỆN CHÍNH ---
 
-# Kiểm tra kết nối
-model_name = get_smart_model()
-if not model_name:
-    st.error("Lỗi kết nối API Key!")
-    st.stop()
+# Tiêu đề
+st.markdown('<div class="main-header">🎄 ỨNG DỤNG TẠO ĐỀ THÔNG MINH - CHÀO XUÂN 2026 🎆</div>', unsafe_allow_html=True)
 
-col_setting, col_main = st.columns([1, 2])
+# Phần Hướng dẫn sử dụng (Nằm trong hộp đóng mở)
+with st.expander("📖 HƯỚNG DẪN SỬ DỤNG (Bấm vào đây để xem chi tiết)", expanded=False):
+    st.markdown("""
+    <div class="instruction-box">
+        <b>Chào mừng quý Thầy Cô! Để tạo đề kiểm tra, hãy làm theo 3 bước sau:</b><br><br>
+        <b>Bước 1: Cấu hình lưu trữ</b><br>
+        - Chọn Cấp học, Lớp và Môn học ở cột bên trái.<br>
+        - Hệ thống sẽ tự động tạo kho lưu trữ riêng cho môn học đó.<br><br>
+        <b>Bước 2: Tải tài liệu nguồn</b><br>
+        - Tải lên các file Giáo án, Sách giáo khoa hoặc Đề cương (Word/PDF).<br>
+        - Nếu tài liệu đã có sẵn trong kho từ trước, Thầy Cô không cần tải lại.<br><br>
+        <b>Bước 3: Ra lệnh cho AI</b><br>
+        - Chọn loại đề kiểm tra (15 phút, Giữa kỳ, Cuối kỳ...).<br>
+        - Bấm nút <b>"🚀 BẮT ĐẦU TẠO ĐỀ"</b> và chờ khoảng 10-20 giây để nhận kết quả.
+    </div>
+    """, unsafe_allow_html=True)
 
-with col_setting:
-    st.info("1. CẤU HÌNH LƯU TRỮ")
-    cap_hoc = st.selectbox("Cấp học", ["Tiểu Học", "THCS", "THPT"])
-    lop_hoc = st.selectbox("Lớp", [f"Lớp {i}" for i in range(1, 13)])
-    mon_hoc = st.selectbox("Môn học", ["Tin học", "Toán", "Văn", "Tiếng Anh", "KHTN", "Lịch Sử", "Địa Lý"])
+col_left, col_right = st.columns([1, 2])
+
+with col_left:
+    st.markdown('<p class="sub-header">⚙️ 1. THIẾT LẬP KHO DỮ LIỆU</p>', unsafe_allow_html=True)
     
-    # Xác định thư mục hiện tại
+    cap_hoc = st.selectbox("Cấp học", ["Tiểu Học", "THCS", "THPT"])
+    lop_hoc = st.selectbox("Lớp", [f"Lớp {i}" for i in range(1, 13)], index=2) # Mặc định lớp 3
+    mon_hoc = st.selectbox("Môn học", ["Tin học", "Toán", "Tiếng Việt", "Công Nghệ", "Khoa học"])
+    
     current_folder = get_folder_path(cap_hoc, lop_hoc, mon_hoc)
     
     st.markdown("---")
-    st.info("2. TẢI TÀI LIỆU LÊN KHO")
-    uploaded_files = st.file_uploader("Chọn file giáo án/đề cũ (Word/PDF)", accept_multiple_files=True)
+    st.markdown('<p class="sub-header">📂 2. TẢI TÀI LIỆU (WORD/PDF)</p>', unsafe_allow_html=True)
+    uploaded_files = st.file_uploader("Kéo thả file vào đây", accept_multiple_files=True)
     
     if uploaded_files:
         for f in uploaded_files:
             status, msg = save_uploaded_file(f, current_folder)
             if status: st.success(msg)
-            else: st.warning(msg)
+            # Không hiển thị lỗi trùng lặp để giao diện sạch hơn
 
-with col_main:
-    st.success(f"📂 Đang làm việc tại thư mục: **{current_folder}**")
+with col_right:
+    st.markdown(f'<div style="background-color: #e6fffa; padding: 10px; border-radius: 5px;">📂 Đang làm việc tại kho: <b>{mon_hoc} - {lop_hoc}</b></div>', unsafe_allow_html=True)
     
-    # Hiển thị danh sách file đang có trong kho
+    # Hiển thị file trong kho
     context_text, list_files = get_all_context(current_folder)
-    
-    with st.expander(f"👁️ Xem danh sách tài liệu hiện có trong kho ({len(list_files)} file)", expanded=True):
+    with st.expander(f"👁️ Xem danh sách {len(list_files)} tài liệu đang có trong kho", expanded=True):
         if list_files:
-            for f in list_files:
-                st.text(f"📄 {f}")
+            for f in list_files: st.text(f"📄 {f}")
         else:
-            st.warning("⚠️ Chưa có tài liệu nào trong thư mục này. Thầy hãy tải lên ở cột bên trái nhé!")
+            st.warning("Chưa có tài liệu nào. Vui lòng tải lên ở cột bên trái.")
 
-    st.markdown("---")
-    st.markdown("### 📝 TẠO ĐỀ KIỂM TRA")
-    loai_de = st.selectbox("Chọn loại đề", ["15 Phút", "1 Tiết", "Giữa Kỳ 1", "Cuối Kỳ 1", "Giữa Kỳ 2", "Cuối Kỳ 2"])
+    st.markdown('<p class="sub-header">📝 3. CẤU HÌNH ĐỀ THI & TẠO</p>', unsafe_allow_html=True)
     
-    if st.button("🚀 BẮT ĐẦU TẠO ĐỀ", type="primary"):
+    loai_de = st.selectbox("Chọn loại bài kiểm tra", 
+                           ["Kiểm tra Thường xuyên (15p)", "Kiểm tra Giữa Học Kì 1", "Kiểm tra Cuối Học Kì 1", "Kiểm tra Giữa Học Kì 2", "Kiểm tra Cuối Học Kì 2"])
+    
+    if st.button("🚀 BẮT ĐẦU TẠO ĐỀ NGAY"):
         if not context_text:
-            st.error("🛑 Không có dữ liệu! Vui lòng tải tài liệu lên kho trước.")
+            st.error("🛑 Kho dữ liệu đang trống! Vui lòng tải giáo án lên trước.")
         else:
-            with st.spinner(f"Đang đọc {len(list_files)} tài liệu và soạn đề..."):
+            with st.spinner(f"❄️ AI Gemini đang đọc {len(list_files)} tài liệu và soạn đề cho Thầy..."):
                 try:
-                    result = generate_test(mon_hoc, lop_hoc, loai_de, context_text, model_name)
-                    st.session_state['kq_pro'] = result
+                    result = generate_test_final(mon_hoc, lop_hoc, loai_de, context_text)
+                    st.session_state['kq_2026'] = result
                 except Exception as e:
-                    st.error(f"Lỗi AI: {e}")
+                    st.error(f"Lỗi kết nối: {e}")
 
-    if 'kq_pro' in st.session_state:
+    # Hiển thị kết quả
+    if 'kq_2026' in st.session_state:
+        st.markdown("---")
+        st.success("✅ Đã tạo đề thành công! Thầy có thể copy nội dung bên dưới:")
+        st.container(border=True).markdown(st.session_state['kq_2026'])
 
-        st.markdown(st.session_state['kq_pro'])
+# --- 5. FOOTER (CHỮ KÝ BẢN QUYỀN) ---
+st.markdown("""
+<div class="footer">
+    Ứng dụng tạo đề kiểm tra được tạo bởi thầy Phan Quốc Khánh và trợ lý ảo Gemini - trường Tiểu học Hua Nguống. <br>
+    Số điện thoại: 0389655141
+</div>
+""", unsafe_allow_html=True)
