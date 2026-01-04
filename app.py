@@ -11,9 +11,17 @@ st.set_page_config(layout="wide", page_title="Kho Học Liệu & Tạo Đề - T
 # THƯ MỤC GỐC ĐỂ LƯU TRỮ (Thầy có thể đổi tên folder này)
 BASE_DIR = "KHO_DU_LIEU_GD"
 
-# API KEY
-GOOGLE_API_KEY = "AIzaSyAbkS0GuPu_7soGRDvRmRZjZjUHpK_xHQU"
-genai.configure(api_key=GOOGLE_API_KEY)
+# --- CẤU HÌNH API KEY (Sửa lại đoạn này) ---
+import os
+
+# Kiểm tra xem đang chạy trên mạng (Secrets) hay ở máy nhà
+if "GOOGLE_API_KEY" in st.secrets:
+    api_key = st.secrets["GOOGLE_API_KEY"]
+else:
+    # Nếu chạy ở máy nhà mà không có secrets, Thầy có thể điền tạm key vào đây để test
+    api_key = "MÃ_KEY_CỦA_THẦY_NẾU_CHẠY_OFFLINE"
+
+genai.configure(api_key=api_key)
 
 # --- 2. CÁC HÀM XỬ LÝ FILE HỆ THỐNG ---
 
@@ -148,4 +156,5 @@ with col_main:
                     st.error(f"Lỗi AI: {e}")
 
     if 'kq_pro' in st.session_state:
+
         st.markdown(st.session_state['kq_pro'])
