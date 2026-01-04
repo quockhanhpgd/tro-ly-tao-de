@@ -4,90 +4,69 @@ from docx import Document
 import PyPDF2
 import os
 
-# --- 1. CẤU HÌNH TRANG ---
+# --- 1. CẤU HÌNH TRANG & GIAO DIỆN CHUẨN ---
 st.set_page_config(
     layout="wide", 
     page_title="Tạo Đề Thi 2026 - Thầy Khánh",
-    page_icon="🎆"
+    page_icon="📝"
 )
 
-# CSS TÙY CHỈNH (KHẮC PHỤC LỖI DÍNH CHỮ)
+# CSS TÙY CHỈNH (CHUẨN HÓA FONT CHỮ TIMES NEW ROMAN & GIAO DIỆN)
 st.markdown("""
 <style>
-    /* 1. TẠO KHOẢNG TRỐNG PHÍA TRÊN */
-    .block-container {
-        padding-top: 2rem !important;
-        padding-bottom: 5rem !important;
+    /* 1. ÉP TOÀN BỘ WEB DÙNG FONT TIMES NEW ROMAN */
+    html, body, [class*="css"] {
+        font-family: 'Times New Roman', Times, serif !important;
     }
 
-    /* 2. TIÊU ĐỀ CHÍNH (Sửa lỗi hiển thị) */
+    /* 2. Khoảng trống phía trên */
+    .block-container { padding-top: 2rem !important; padding-bottom: 5rem !important; }
+
+    /* 3. Tiêu đề chính */
     .main-header {
-        font-family: 'Arial', sans-serif;
-        font-size: 30px; 
-        font-weight: 900; 
-        color: #D42426; /* Đỏ tết */
-        text-align: center; 
-        text-transform: uppercase;
-        text-shadow: 1px 1px 0px #FFD700;
-        margin-bottom: 20px;
-        line-height: 1.5; /* Giãn dòng để không bị mất chóp chữ */
-        padding: 10px;
+        font-size: 32px; font-weight: 900; color: #cc0000; 
+        text-align: center; text-transform: uppercase;
+        margin-bottom: 20px; text-shadow: 1px 1px 1px #ddd;
     }
     
-    /* 3. TIÊU ĐỀ MỤC CON (1, 2, 3...) - Sửa lỗi dính chữ */
-    .section-header {
-        font-size: 20px;
-        font-weight: bold;
-        color: #146B3A; /* Xanh lá đậm */
-        margin-top: 15px;
-        margin-bottom: 10px;
-        border-bottom: 2px solid #eee;
-        padding-bottom: 5px;
-    }
-    .section-number {
-        background-color: #D42426;
-        color: white;
-        padding: 2px 10px;
-        border-radius: 20px;
-        margin-right: 10px;
-        font-size: 18px;
-    }
-    
-    /* 4. CHỮ CHẠY MARQUEE */
+    /* 4. Chữ chạy Marquee */
     .marquee-container {
-        width: 100%;
-        overflow: hidden;
-        background: linear-gradient(90deg, #fff0f0, #ffecec);
-        border-top: 2px solid #D42426;
-        border-bottom: 2px solid #D42426;
-        padding: 8px 0;
-        margin-bottom: 30px;
+        width: 100%; overflow: hidden; background-color: #fff5f5;
+        border: 1px solid #cc0000;
+        padding: 10px 0; margin-bottom: 20px; border-radius: 5px;
     }
     .marquee-text {
-        font-size: 18px;
-        font-weight: bold;
-        color: #ce0000;
-        white-space: nowrap;
-        animation: marquee 20s linear infinite;
+        font-size: 18px; font-weight: bold; color: #cc0000;
+        white-space: nowrap; animation: marquee 25s linear infinite;
     }
     @keyframes marquee { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
 
-    /* 5. FOOTER */
-    .footer {
-        position: fixed; left: 0; bottom: 0; width: 100%;
-        background-color: #0d5e38; color: white; text-align: center;
-        padding: 10px; font-size: 13px; font-weight: bold;
-        z-index: 9999; border-top: 3px solid #FFD700;
+    /* 5. Tiêu đề mục (1, 2, 3) */
+    .section-header {
+        font-size: 20px; font-weight: bold; color: #006633;
+        border-bottom: 2px solid #006633; margin-top: 20px; margin-bottom: 10px;
+        padding-bottom: 5px;
+    }
+
+    /* 6. Hướng dẫn sử dụng */
+    .guide-box {
+        background-color: #f4fcf6; border: 1px solid #006633;
+        border-radius: 5px; padding: 20px; font-size: 16px; line-height: 1.6;
     }
     
-    /* 6. NÚT BẤM */
+    /* 7. Footer */
+    .footer {
+        position: fixed; left: 0; bottom: 0; width: 100%;
+        background-color: #006633; color: white; text-align: center;
+        padding: 10px; font-size: 14px; z-index: 9999;
+    }
+    
+    /* 8. Nút bấm */
     .stButton>button {
-        background-color: #0d5e38; color: white; border-radius: 8px; font-weight: bold; height: 3em;
-        border: 1px solid #FFD700;
+        background-color: #006633; color: white; font-size: 18px;
+        border-radius: 5px; height: 50px; border: none;
     }
-    .stButton>button:hover {
-        background-color: #D42426; color: #FFD700;
-    }
+    .stButton>button:hover { background-color: #cc0000; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -128,15 +107,20 @@ def read_doc_text(file_path):
     except: pass
     return text
 
-def get_all_context(folder_path):
+def get_selected_context(folder_path, selected_files):
+    """Chỉ đọc nội dung của các file được Thầy giáo chọn"""
     all_text = ""
-    files = [f for f in os.listdir(folder_path) if f.endswith(('.docx', '.pdf', '.txt'))]
-    for file_name in files:
+    # Nếu không chọn file nào thì mặc định lấy hết
+    files_to_read = selected_files if selected_files else [f for f in os.listdir(folder_path) if f.endswith(('.docx', '.pdf', '.txt'))]
+    
+    for file_name in files_to_read:
         full_path = os.path.join(folder_path, file_name)
-        all_text += f"\n--- TÊN TÀI LIỆU: {file_name} ---\n{read_doc_text(full_path)}\n"
-    return all_text, files
+        if os.path.exists(full_path):
+            all_text += f"\n--- TÀI LIỆU CĂN CỨ: {file_name} ---\n{read_doc_text(full_path)}\n"
+            
+    return all_text
 
-# --- 4. HÀM AI THÔNG MINH ---
+# --- 4. HÀM AI ---
 def get_best_model():
     try:
         models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
@@ -146,105 +130,129 @@ def get_best_model():
         return models[0] if models else 'gemini-pro'
     except: return 'gemini-pro'
 
-def generate_test_strict(mon, lop, loai, context):
+def generate_test_v5(mon, lop, loai, context):
     model_name = get_best_model()
     model = genai.GenerativeModel(model_name)
     
     prompt = f"""
-    Vai trò: Chuyên gia biên soạn đề thi môn {mon} lớp {lop}.
-    Nhiệm vụ: Soạn thảo đề kiểm tra "{loai}" CHẤT LƯỢNG CAO.
+    Vai trò: Giáo viên dạy giỏi môn {mon} lớp {lop}.
+    Nhiệm vụ: Soạn đề kiểm tra "{loai}" CHUẨN MỰC.
     
-    DỮ LIỆU ĐẦU VÀO (QUAN TRỌNG):
+    DỮ LIỆU ĐƯỢC GIÁO VIÊN CUNG CẤP (CHỈ DÙNG DỮ LIỆU NÀY):
     {context}
     
-    YÊU CẦU TUÂN THỦ:
-    1. Nếu có file Ma trận/Đặc tả: PHẢI tuân thủ 100% số lượng câu, mức độ kiến thức và điểm số trong đó.
-    2. Nếu có Đề mẫu: Hãy bắt chước cách trình bày, font chữ, phong cách đặt câu hỏi.
-    3. Nếu không có mẫu: Soạn theo chuẩn Thông tư 27 (40% Trắc nghiệm, 60% Tự luận/Thực hành).
+    YÊU CẦU NGHIÊM NGẶT:
+    1. CẤU TRÚC ĐỀ: 
+       - Nếu dữ liệu có "Ma trận" hoặc "Đề minh họa": Phải tuân thủ 100% cấu trúc, số lượng câu và thang điểm của tài liệu đó.
+       - Nếu không có: Mặc định làm 40% Trắc nghiệm, 60% Tự luận.
+    2. NỘI DUNG: Câu hỏi phải nằm trong phạm vi kiến thức của tài liệu đã cung cấp. Không bịa đặt kiến thức ngoài.
+    3. HÌNH THỨC: Trình bày rõ ràng, không dùng các ký tự lạ, dùng font chữ chuẩn.
     
-    ĐẦU RA:
-    - I. MA TRẬN ĐỀ (Mô tả lại cấu trúc bạn đã dùng)
-    - II. ĐỀ BÀI CHI TIẾT
-    - III. HƯỚNG DẪN CHẤM VÀ ĐÁP ÁN
+    KẾT QUẢ TRẢ VỀ (Markdown):
+    - Phần I: MA TRẬN ĐỀ (Mô tả ngắn gọn cấu trúc đã dùng)
+    - Phần II: ĐỀ BÀI (Trình bày đẹp)
+    - Phần III: HƯỚNG DẪN CHẤM (Đáp án chi tiết)
     """
     return model.generate_content(prompt).text
 
 # --- 5. GIAO DIỆN CHÍNH ---
 
-# 5.1 Tiêu đề chính (Dùng thẻ H1 chuẩn để không bị lỗi font)
 st.markdown('<div class="main-header">ỨNG DỤNG TẠO ĐỀ KIỂM TRA THÔNG MINH</div>', unsafe_allow_html=True)
 
-# 5.2 Chữ chạy
 st.markdown("""
 <div class="marquee-container">
-    <div class="marquee-text">🌸 CUNG CHÚC TÂN XUÂN CHÀO NĂM BÍNH NGỌ 2026 - CHÚC QUÝ THẦY CÔ VÀ CÁC EM HỌC SINH MỘT NĂM MỚI AN KHANG THỊNH VƯỢNG 🌸</div>
+    <div class="marquee-text">🌸 CUNG CHÚC TÂN XUÂN CHÀO NĂM BÍNH NGỌ 2026 - CHÚC QUÝ THẦY CÔ VÀ CÁC EM HỌC SINH NĂM MỚI THÀNH CÔNG RỰC RỠ 🌸</div>
 </div>
 """, unsafe_allow_html=True)
 
-# 5.3 Hướng dẫn
-with st.expander("📖 HƯỚNG DẪN SỬ DỤNG (Bấm vào đây)", expanded=False):
-    st.info("Bước 1: Chọn Môn/Lớp (Bên trái) -> Bước 2: Tải tài liệu Ma trận/Đề mẫu -> Bước 3: Bấm nút Tạo đề (Bên phải).")
+# --- PHẦN HƯỚNG DẪN SỬ DỤNG CHI TIẾT ---
+with st.expander("📖 BẤM VÀO ĐÂY ĐỂ XEM HƯỚNG DẪN SỬ DỤNG CHI TIẾT", expanded=False):
+    st.markdown("""
+    <div class="guide-box">
+        <b>Kính chào Quý Thầy Cô và các em Học sinh!</b><br>
+        Để tạo ra một đề kiểm tra chính xác, bám sát ma trận mới nhất, xin hãy thực hiện đúng theo 4 bước sau:<br><br>
+        
+        <b>BƯỚC 1: THIẾT LẬP THÔNG TIN (Cột bên trái)</b><br>
+        - Chọn đúng <b>Cấp học</b>, <b>Lớp</b> và <b>Môn học</b> mà thầy cô muốn ra đề.<br>
+        - Hệ thống sẽ tự động mở "Kho dữ liệu" tương ứng của môn học đó.<br><br>
+        
+        <b>BƯỚC 2: TẢI TÀI LIỆU LÊN KHO (Nếu chưa có)</b><br>
+        - Thầy cô tải các file quan trọng như: <i>Ma trận đề thi năm nay, Đề minh họa, Nội dung ôn tập...</i><br>
+        - <b>Lưu ý:</b> Nên đặt tên file rõ ràng (Ví dụ: <i>Ma-tran-HK2-nam-2026.docx</i>) để dễ quản lý.<br><br>
+        
+        <b>BƯỚC 3: CHỌN TÀI LIỆU ĐỂ RA ĐỀ (Quan trọng!)</b><br>
+        - Ở cột bên phải, mục <b>"Chọn tài liệu sử dụng"</b>, thầy cô hãy tích chọn chính xác những file muốn dùng.<br>
+        - <i>Ví dụ:</i> Năm nay có ma trận mới, thầy cô chỉ tích chọn file "Ma trận 2026", bỏ chọn các file cũ.<br><br>
+        
+        <b>BƯỚC 4: TẠO ĐỀ</b><br>
+        - Chọn loại đề (15 phút, Giữa kỳ...).<br>
+        - Bấm nút <b>"🚀 BẮT ĐẦU TẠO ĐỀ NGAY"</b> và chờ kết quả trong giây lát.
+    </div>
+    """, unsafe_allow_html=True)
 
+# --- GIAO DIỆN CHÍNH CHIA 2 CỘT ---
 col1, col2 = st.columns([1, 2])
 
 with col1:
-    # Dùng HTML thuần để hiển thị tiêu đề mục 1 rõ ràng
-    st.markdown('<div class="section-header"><span class="section-number">1</span>Thiết lập & Dữ liệu</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-header">1. THIẾT LẬP & TẢI TÀI LIỆU</div>', unsafe_allow_html=True)
     
     cap = st.selectbox("Cấp học", ["Tiểu Học", "THCS", "THPT"])
     lop = st.selectbox("Lớp", [f"Lớp {i}" for i in range(1, 13)], index=2)
-    mon = st.selectbox("Môn học", ["Tin học", "Toán", "Tiếng Việt", "Công Nghệ"])
+    mon = st.selectbox("Môn học", ["Tin học", "Toán", "Tiếng Việt", "Công Nghệ", "Khoa Học"])
     
+    # Xác định đường dẫn kho
     curr_dir = get_folder_path(cap, lop, mon)
     
     st.markdown("---")
-    # Tiêu đề mục 2
-    st.markdown('<div class="section-header"><span class="section-number">2</span>Tải tài liệu lên kho</div>', unsafe_allow_html=True)
-    st.caption("Gợi ý: Tải file Ma trận và Đề mẫu (Word/PDF)")
-    
+    st.info("📤 Tải thêm tài liệu mới vào kho (Word/PDF)")
     uploads = st.file_uploader("Chọn file...", accept_multiple_files=True, label_visibility="collapsed")
     if uploads:
         for f in uploads: save_uploaded_file(f, curr_dir)
-        st.toast("Đã lưu tài liệu!", icon="✅")
+        st.success("Đã lưu file vào kho!")
 
 with col2:
-    context, files = get_all_context(curr_dir)
+    # Lấy danh sách file đang có trong thư mục
+    files_in_dir = [f for f in os.listdir(curr_dir) if f.endswith(('.docx', '.pdf', '.txt'))]
     
-    # Tiêu đề bên phải
-    st.markdown(f'<div class="section-header">📂 Kho dữ liệu: {mon} - {lop} ({len(files)} file)</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="section-header">2. LỰA CHỌN TÀI LIỆU TỪ KHO ({mon} - {lop})</div>', unsafe_allow_html=True)
     
-    with st.container(height=150, border=True):
-        if files:
-            for f in files: 
-                icon = "📏" if "ma tran" in f.lower() else "📝" if "de" in f.lower() else "📄"
-                st.text(f"{icon} {f}")
-        else: st.warning("Kho trống. Vui lòng tải tài liệu ở cột bên trái.")
+    if not files_in_dir:
+        st.warning("⚠️ Kho dữ liệu đang trống. Thầy hãy tải Ma trận hoặc Giáo án lên ở cột bên trái.")
+        selected_files = []
+    else:
+        st.write("Thầy muốn dùng tài liệu nào để ra đề? (Hãy tích chọn)")
+        # --- TÍNH NĂNG MỚI: CHO PHÉP CHỌN FILE CỤ THỂ ---
+        selected_files = st.multiselect(
+            "Danh sách tài liệu có sẵn:",
+            options=files_in_dir,
+            default=files_in_dir, # Mặc định chọn hết, thầy có thể bỏ bớt
+            format_func=lambda x: f"📄 {x}"
+        )
+        
+        if len(selected_files) == 0:
+            st.error("🛑 Thầy chưa chọn tài liệu nào cả! Hãy tích chọn ít nhất 1 file.")
 
-    # Tiêu đề mục 3
-    st.markdown('<div class="section-header"><span class="section-number">3</span>Cấu hình & Tạo đề</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-header">3. CẤU HÌNH & TẠO ĐỀ</div>', unsafe_allow_html=True)
     
-    loai = st.selectbox("Loại đề thi", ["15 Phút", "Giữa Kỳ 1", "Cuối Kỳ 1", "Giữa Kỳ 2", "Cuối Kỳ 2"], label_visibility="collapsed")
+    loai = st.selectbox("Loại đề thi", ["15 Phút", "Giữa Học Kỳ 1", "Cuối Học Kỳ 1", "Giữa Học Kỳ 2", "Cuối Học Kỳ 2"], label_visibility="collapsed")
     
     st.write("")
     if st.button("🚀 BẮT ĐẦU TẠO ĐỀ NGAY"):
-        if not context:
-            st.error("Chưa có dữ liệu! Hãy tải Ma trận hoặc Giáo án lên trước.")
+        if not selected_files:
+            st.error("Vui lòng chọn tài liệu trước khi tạo đề!")
         else:
-            with st.spinner("AI đang đọc Ma trận và biên soạn đề..."):
+            # Chỉ lấy nội dung của các file ĐƯỢC CHỌN
+            context = get_selected_context(curr_dir, selected_files)
+            
+            with st.spinner("AI đang đọc các tài liệu thầy chọn và soạn đề..."):
                 try:
-                    res = generate_test_strict(mon, lop, loai, context)
-                    st.session_state['kq_fix'] = res
+                    res = generate_test_v5(mon, lop, loai, context)
+                    st.session_state['kq_v5'] = res
                 except Exception as e:
                     st.error(f"Lỗi: {e}")
 
-    if 'kq_fix' in st.session_state:
+    # Hiển thị kết quả
+    if 'kq_v5' in st.session_state:
         st.markdown("---")
-        st.container(border=True).markdown(st.session_state['kq_fix'])
-
-# --- FOOTER ---
-st.markdown("""
-<div class="footer">
-    Ứng dụng tạo đề kiểm tra được tạo bởi thầy Phan Quốc Khánh và trợ lý ảo Gemini - trường Tiểu học Hua Nguống.<br>
-    Số điện thoại: 0389655141
-</div>
-""", unsafe_allow_html=True)
+        st.success("✅ Đề thi đã được tạo xong:")
+        st.container(
