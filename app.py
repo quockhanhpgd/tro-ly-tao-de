@@ -81,23 +81,20 @@ def get_selected_context(folder_path, selected_files):
             all_text += f"\n--- TÀI LIỆU: {file_name} ---\n{read_doc_text(full_path)}\n"
     return all_text
 
-# --- 4. HÀM XUẤT FILE WORD CHUẨN MẪU (NÂNG CẤP) ---
+# --- 4. HÀM XUẤT FILE WORD CHUẨN MẪU ---
 def create_word_file(content, mon_hoc, lop_hoc):
     doc = Document()
-    
-    # Cài đặt phông chữ mặc định Times New Roman
     style = doc.styles['Normal']
     font = style.font
     font.name = 'Times New Roman'
     font.size = Pt(13)
     
-    # --- PHẦN 1: HEADER (QUỐC HIỆU & TÊN TRƯỜNG) ---
+    # Header Table
     table = doc.add_table(rows=1, cols=2)
     table.autofit = False
     table.columns[0].width = Inches(2.5)
     table.columns[1].width = Inches(3.5)
     
-    # Cột trái: Phòng/Trường
     cell_1 = table.cell(0, 0)
     p1 = cell_1.paragraphs[0]
     r1 = p1.add_run(f"PHÒNG GD&ĐT HUYỆN........\nTRƯỜNG TH HUA NGUỐNG\n-------")
@@ -106,7 +103,6 @@ def create_word_file(content, mon_hoc, lop_hoc):
     r1.font.name = 'Times New Roman'
     p1.alignment = WD_ALIGN_PARAGRAPH.CENTER
     
-    # Cột phải: Tên đề thi
     cell_2 = table.cell(0, 1)
     p2 = cell_2.paragraphs[0]
     r2 = p2.add_run(f"ĐỀ KIỂM TRA CHẤT LƯỢNG\nMÔN: {mon_hoc.upper()} - {lop_hoc.upper()}\nNăm học: 2025 - 2026")
@@ -115,49 +111,47 @@ def create_word_file(content, mon_hoc, lop_hoc):
     r2.font.name = 'Times New Roman'
     p2.alignment = WD_ALIGN_PARAGRAPH.CENTER
     
-    doc.add_paragraph() # Khoảng cách
-    
-    # Khung họ tên
+    doc.add_paragraph()
     p_info = doc.add_paragraph(f"Họ và tên:................................................................Lớp:....................")
     p_info.runs[0].font.name = 'Times New Roman'
     p_info.runs[0].font.size = Pt(13)
-    
     doc.add_paragraph("-------------------------------------------------------------------------------------------------------------------------------")
 
-    # --- PHẦN 2: NỘI DUNG ĐỀ THI (XỬ LÝ THÔNG MINH) ---
+    # Content Processing
     lines = content.split('\n')
     for line in lines:
         line = line.strip()
         if not line: continue
-        
-        # Xử lý các dấu ** do AI sinh ra
         clean_line = line.replace("**", "")
-        
         p = doc.add_paragraph()
         run = p.add_run(clean_line)
         run.font.name = 'Times New Roman'
         run.font.size = Pt(13)
         
-        # Tự động In đậm các dòng Tiêu đề (I., II., Câu, Phần)
         if line.startswith(("Câu", "Bài", "PHẦN", "I.", "II.", "III.", "A.", "B.")):
             run.bold = True
-            p.space_before = Pt(6) # Cách đoạn trên 1 chút cho thoáng
+            p.space_before = Pt(6)
         
-        # Nếu là tên đề bài thì ra giữa
         if line.startswith("ĐỀ BÀI") or line.startswith("ĐỀ KIỂM TRA"):
             p.alignment = WD_ALIGN_PARAGRAPH.CENTER
             run.bold = True
             run.font.size = Pt(14)
 
-    # Lưu file
     bio = BytesIO()
     doc.save(bio)
     bio.seek(0)
     return bio
 
-# --- 5. HÀM AI ---
-def generate_test_v10(mon, lop, loai, context):
-    model = genai.GenerativeModel('gemini-pro')
+# --- 5. HÀM AI (ĐÃ SỬA LỖI MODEL) ---
+def generate_test_v11(mon, lop, loai, context):
+    # SỬA LỖI QUAN TRỌNG: Chuyển sang dùng model 'gemini-1.5-flash' mới nhất
+    # để tránh lỗi 404 của bản cũ
+    try:
+        model = genai.GenerativeModel('gemini-1.5-flash')
+    except:
+        # Nếu vẫn lỗi thì thử fallback sang bản pro
+        model = genai.GenerativeModel('gemini-1.5-pro')
+
     prompt = f"""
     Vai trò: Giáo viên {mon} lớp {lop} chuyên nghiệp.
     Nhiệm vụ: Soạn đề kiểm tra "{loai}" để xuất ra file Word.
@@ -223,16 +217,15 @@ with col2:
             ctx = get_selected_context(curr_dir, selected_files)
             with st.spinner("Đang thiết lập định dạng Word..."):
                 try:
-                    res = generate_test_v10(mon, lop, loai, ctx)
-                    st.session_state['kq_v10'] = res
+                    res = generate_test_v11(mon, lop, loai, ctx)
+                    st.session_state['kq_v11'] = res
                 except Exception as e: st.error(f"Lỗi: {e}")
 
-    if 'kq_v10' in st.session_state:
+    if 'kq_v11' in st.session_state:
         st.markdown("---")
         st.success("✅ Đã tạo xong! Bấm nút dưới để tải về:")
         
-        # TẠO FILE WORD CHUẨN
-        doc_file = create_word_file(st.session_state['kq_v10'], mon, lop)
+        doc_file = create_word_file(st.session_state['kq_v11'], mon, lop)
         
         st.download_button(
             label="📥 TẢI FILE WORD (.DOCX) - ĐÚNG ĐỊNH DẠNG",
@@ -243,7 +236,7 @@ with col2:
         )
         
         with st.expander("Xem trước nội dung thô:"):
-            st.markdown(st.session_state['kq_v10'])
+            st.markdown(st.session_state['kq_v11'])
 
 # --- FOOTER ---
 st.markdown("""
