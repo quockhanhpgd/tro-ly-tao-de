@@ -35,7 +35,9 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- 2. CẤU HÌNH API ---
+# Thầy dán mã API vào đây
 API_KEY_DU_PHONG = "AIzaSy_MÃ_API_CỦA_THẦY_VÀO_ĐÂY"
+
 try:
     if "GOOGLE_API_KEY" in st.secrets:
         api_key = st.secrets["GOOGLE_API_KEY"]
@@ -81,7 +83,7 @@ def get_selected_context(folder_path, selected_files):
             all_text += f"\n--- TÀI LIỆU: {file_name} ---\n{read_doc_text(full_path)}\n"
     return all_text
 
-# --- 4. HÀM XUẤT FILE WORD CHUẨN ---
+# --- 4. HÀM XUẤT FILE WORD ---
 def create_word_file(content, mon_hoc, lop_hoc):
     doc = Document()
     style = doc.styles['Normal']
@@ -89,7 +91,6 @@ def create_word_file(content, mon_hoc, lop_hoc):
     font.name = 'Times New Roman'
     font.size = Pt(13)
     
-    # Header Table
     table = doc.add_table(rows=1, cols=2)
     table.autofit = False
     table.columns[0].width = Inches(2.5)
@@ -117,7 +118,6 @@ def create_word_file(content, mon_hoc, lop_hoc):
     p_info.runs[0].font.size = Pt(13)
     doc.add_paragraph("-------------------------------------------------------------------------------------------------------------------------------")
 
-    # Content Processing
     lines = content.split('\n')
     for line in lines:
         line = line.strip()
@@ -131,7 +131,6 @@ def create_word_file(content, mon_hoc, lop_hoc):
         if line.startswith(("Câu", "Bài", "PHẦN", "I.", "II.", "III.", "A.", "B.")):
             run.bold = True
             p.space_before = Pt(6)
-        
         if line.startswith("ĐỀ BÀI") or line.startswith("ĐỀ KIỂM TRA"):
             p.alignment = WD_ALIGN_PARAGRAPH.CENTER
             run.bold = True
@@ -142,49 +141,43 @@ def create_word_file(content, mon_hoc, lop_hoc):
     bio.seek(0)
     return bio
 
-# --- 5. HÀM AI THÔNG MINH (TỰ ĐỘNG DÒ TÌM MODEL) ---
-def get_smart_model():
-    """Hàm này tự động tìm model tốt nhất đang hoạt động"""
-    try:
-        # Lấy danh sách model hỗ trợ
-        models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        
-        # Ưu tiên các model xịn nhất
-        priority = ['models/gemini-1.5-flash', 'models/gemini-1.5-pro', 'models/gemini-1.0-pro', 'models/gemini-pro']
-        
-        for p in priority:
-            if p in models:
-                return genai.GenerativeModel(p)
-        
-        # Nếu không thấy cái nào quen, lấy cái đầu tiên tìm được
-        if models:
-            return genai.GenerativeModel(models[0])
-            
-    except Exception:
-        pass
+# --- 5. HÀM AI (ĐÃ CẤU HÌNH TẮT BỘ LỌC AN TOÀN) ---
+def generate_test_v13(mon, lop, loai, context):
+    # Cấu hình tắt toàn bộ bộ lọc an toàn để tránh lỗi "Finish Reason 1"
+    safety_settings = [
+        {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+        {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+        {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+        {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+    ]
     
-    # Đường cùng: Trả về bản mặc định (có thể lỗi nhưng đáng thử)
-    return genai.GenerativeModel('gemini-1.5-flash')
+    # Ưu tiên dùng model Flash mới nhất
+    model = genai.GenerativeModel('gemini-1.5-flash', safety_settings=safety_settings)
 
-def generate_test_v12(mon, lop, loai, context):
-    model = get_smart_model() # Tự động chọn model
-    
     prompt = f"""
     Vai trò: Giáo viên {mon} lớp {lop} chuyên nghiệp.
     Nhiệm vụ: Soạn đề kiểm tra "{loai}" để xuất ra file Word.
-    
     TÀI LIỆU CĂN CỨ: {context}
-    
-    YÊU CẦU QUAN TRỌNG VỀ ĐỊNH DẠNG:
-    1. KHÔNG dùng bảng (table) trong đề bài.
-    2. KHÔNG dùng Markdown phức tạp. Dùng I., II., 1., 2. rõ ràng.
-    3. Cấu trúc đề phải gồm:
-       - PHẦN I. TRẮC NGHIỆM
-       - PHẦN II. TỰ LUẬN
-       - PHẦN III. ĐÁP ÁN VÀ HƯỚNG DẪN CHẤM
-    4. Nội dung câu hỏi phải chính xác, bám sát tài liệu.
+    YÊU CẦU:
+    1. Cấu trúc đề: PHẦN I. TRẮC NGHIỆM, PHẦN II. TỰ LUẬN, PHẦN III. ĐÁP ÁN.
+    2. Không dùng bảng, không dùng Markdown phức tạp.
+    3. Nội dung bám sát tài liệu.
     """
-    return model.generate_content(prompt).text
+    
+    try:
+        response = model.generate_content(prompt)
+        # Kiểm tra xem có nội dung không
+        if response.text:
+            return response.text
+        else:
+            return "AI đã trả về kết quả rỗng. Vui lòng thử lại."
+    except Exception as e:
+        # Nếu lỗi model Flash, thử fallback về Pro
+        try:
+            model_bk = genai.GenerativeModel('gemini-pro', safety_settings=safety_settings)
+            return model_bk.generate_content(prompt).text
+        except:
+            return f"Lỗi khởi tạo: {str(e)}"
 
 # --- 6. GIAO DIỆN CHÍNH ---
 st.markdown('<div class="main-header">ỨNG DỤNG TẠO ĐỀ KIỂM TRA THÔNG MINH</div>', unsafe_allow_html=True)
@@ -232,17 +225,17 @@ with col2:
         if not selected_files: st.error("Chưa chọn tài liệu!")
         else:
             ctx = get_selected_context(curr_dir, selected_files)
-            with st.spinner("Đang tìm model phù hợp và soạn đề..."):
+            with st.spinner("Đang soạn đề (Đã tắt bộ lọc an toàn)..."):
                 try:
-                    res = generate_test_v12(mon, lop, loai, ctx)
-                    st.session_state['kq_v12'] = res
-                except Exception as e: st.error(f"Lỗi: {e}")
+                    res = generate_test_v13(mon, lop, loai, ctx)
+                    st.session_state['kq_v13'] = res
+                except Exception as e: st.error(f"Lỗi hệ thống: {e}")
 
-    if 'kq_v12' in st.session_state:
+    if 'kq_v13' in st.session_state:
         st.markdown("---")
         st.success("✅ Đã tạo xong! Bấm nút dưới để tải về:")
         
-        doc_file = create_word_file(st.session_state['kq_v12'], mon, lop)
+        doc_file = create_word_file(st.session_state['kq_v13'], mon, lop)
         
         st.download_button(
             label="📥 TẢI FILE WORD (.DOCX) - ĐÚNG ĐỊNH DẠNG",
@@ -253,7 +246,7 @@ with col2:
         )
         
         with st.expander("Xem trước nội dung thô:"):
-            st.markdown(st.session_state['kq_v12'])
+            st.markdown(st.session_state['kq_v13'])
 
 # --- FOOTER ---
 st.markdown("""
