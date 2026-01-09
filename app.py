@@ -6,7 +6,6 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from io import BytesIO
 import os
 import PyPDF2
-import time
 
 # --- 1. CẤU HÌNH TRANG ---
 st.set_page_config(layout="wide", page_title="Tạo Đề Thi 2026 - Thầy Khánh", page_icon="📝")
@@ -26,18 +25,10 @@ st.markdown("""
         padding: 10px; font-size: 14px; z-index: 9999; border-top: 3px solid #FFD700;
         font-weight: bold;
     }
-    .section-title { color: #006633; font-weight: bold; font-size: 18px; border-bottom: 2px solid #006633; margin-bottom: 15px; }
-    
-    /* Khung xem trước nội dung đề thi */
     .preview-container {
-        border: 2px solid #006633;
-        border-radius: 10px;
-        padding: 20px;
-        background-color: white;
-        margin-top: 20px;
-        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        border: 2px solid #006633; border-radius: 10px; padding: 20px;
+        background-color: white; margin-top: 20px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);
     }
-    
     .stButton>button {
         background-color: #cc0000; color: white; font-size: 20px; font-weight: bold;
         width: 100%; height: 55px; border-radius: 8px; border: 1px solid white;
@@ -58,9 +49,8 @@ except: api_key = API_KEY_DU_PHONG
 try: genai.configure(api_key=api_key)
 except: pass
 
-# --- 3. HÀM XỬ LÝ FILE ---
+# --- 3. CÁC HÀM XỬ LÝ (GIỮ NGUYÊN) ---
 BASE_DIR = "KHO_DU_LIEU_GD"
-
 def get_folder_path(cap, lop, mon):
     path = os.path.join(BASE_DIR, cap, lop, mon)
     if not os.path.exists(path): os.makedirs(path)
@@ -93,7 +83,6 @@ def get_selected_context(folder_path, selected_files):
             all_text += f"\n--- TÀI LIỆU: {file_name} ---\n{read_doc_text(full_path)}\n"
     return all_text
 
-# --- 4. HÀM XUẤT FILE WORD ---
 def create_word_file(content, mon_hoc, lop_hoc):
     doc = Document()
     style = doc.styles['Normal']
@@ -137,7 +126,6 @@ def create_word_file(content, mon_hoc, lop_hoc):
         run = p.add_run(clean_line)
         run.font.name = 'Times New Roman'
         run.font.size = Pt(13)
-        
         if line.startswith(("Câu", "Bài", "PHẦN", "I.", "II.", "III.", "A.", "B.")):
             run.bold = True
             p.space_before = Pt(6)
@@ -151,17 +139,9 @@ def create_word_file(content, mon_hoc, lop_hoc):
     bio.seek(0)
     return bio
 
-# --- 5. HÀM AI THÔNG MINH (CƠ CHẾ THỬ SAI 3 LỚP) ---
-def generate_test_v14(mon, lop, loai, context):
-    # Danh sách các model để thử (Ưu tiên mới nhất -> Cũ hơn)
-    models_to_try = [
-        'gemini-1.5-flash', 
-        'gemini-1.5-pro', 
-        'gemini-1.0-pro', 
-        'gemini-pro'
-    ]
-    
-    # Cấu hình tắt bộ lọc an toàn
+# --- 4. HÀM AI THÔNG MINH (PHIÊN BẢN TƯƠNG THÍCH MỌI ĐỜI) ---
+def generate_test_v15(mon, lop, loai, context):
+    # Cấu hình an toàn: Cho phép mọi nội dung giáo dục
     safety_settings = [
         {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
         {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
@@ -169,42 +149,44 @@ def generate_test_v14(mon, lop, loai, context):
         {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
     ]
     
+    # Chiến thuật: Thử Flash -> Thử Pro 1.5 -> Thử Pro 1.0 (Cũ)
+    models_priority = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-1.0-pro', 'gemini-pro']
+    
     last_error = ""
     
-    for model_name in models_to_try:
+    for m in models_priority:
         try:
-            # Khởi tạo model
-            model = genai.GenerativeModel(model_name, safety_settings=safety_settings)
-            
+            model = genai.GenerativeModel(m, safety_settings=safety_settings)
             prompt = f"""
             Vai trò: Giáo viên {mon} lớp {lop}.
             Nhiệm vụ: Soạn đề kiểm tra "{loai}" để xuất ra file Word.
             TÀI LIỆU CĂN CỨ: {context}
             YÊU CẦU:
             1. Cấu trúc đề: PHẦN I. TRẮC NGHIỆM, PHẦN II. TỰ LUẬN, PHẦN III. ĐÁP ÁN.
-            2. Không dùng bảng.
-            3. Nội dung bám sát tài liệu.
+            2. Nội dung bám sát tài liệu.
             """
-            
-            # Gọi AI tạo nội dung
             response = model.generate_content(prompt)
             if response.text:
-                return response.text # Thành công thì trả về ngay
-                
+                return response.text
         except Exception as e:
-            # Nếu lỗi thì lưu lại và thử cái tiếp theo
             last_error = str(e)
-            continue
+            continue # Thử model tiếp theo
             
-    # Nếu thử hết mà vẫn không được
-    return f"Hệ thống đang quá tải hoặc lỗi kết nối. Chi tiết lỗi: {last_error}"
+    return f"Lỗi kết nối AI: Không tìm thấy model phù hợp. Chi tiết: {last_error}"
 
-# --- 6. GIAO DIỆN CHÍNH ---
+# --- 5. GIAO DIỆN CHÍNH ---
 st.markdown('<div class="main-header">ỨNG DỤNG TẠO ĐỀ KIỂM TRA THÔNG MINH</div>', unsafe_allow_html=True)
 st.markdown("""
 <div style="background:#fff5f5; border:1px solid #cc0000; padding:10px; margin-bottom:20px; text-align:center;">
     <marquee style="color:#cc0000; font-weight:bold; font-size:18px;">🌸 CUNG CHÚC TÂN XUÂN CHÀO NĂM BÍNH NGỌ 2026 🌸</marquee>
 </div>""", unsafe_allow_html=True)
+
+# KIỂM TRA PHIÊN BẢN HỆ THỐNG (ĐỂ THẦY BIẾT ĐÃ CẬP NHẬT CHƯA)
+ver = genai.__version__
+if ver < "0.7.0":
+    st.error(f"⚠️ CẢNH BÁO: Phiên bản hệ thống đang cũ ({ver}). Vui lòng Reboot App để cập nhật lên 0.7.0 trở lên.")
+else:
+    st.success(f"✅ Hệ thống đã sẵn sàng (Phiên bản AI: {ver})")
 
 col1, col2 = st.columns([1, 2])
 
@@ -245,19 +227,18 @@ with col2:
         if not selected_files: st.error("Chưa chọn tài liệu!")
         else:
             ctx = get_selected_context(curr_dir, selected_files)
-            with st.spinner("Đang tìm model phù hợp và soạn đề..."):
+            with st.spinner("Đang kết nối AI và soạn đề..."):
                 try:
-                    res = generate_test_v14(mon, lop, loai, ctx)
-                    st.session_state['kq_v14'] = res
+                    res = generate_test_v15(mon, lop, loai, ctx)
+                    st.session_state['kq_v15'] = res
                 except Exception as e: st.error(f"Lỗi: {e}")
 
-    # --- PHẦN HIỂN THỊ KẾT QUẢ (XEM TRƯỚC RỒI MỚI TẢI) ---
-    if 'kq_v14' in st.session_state:
+    # HIỂN THỊ KẾT QUẢ & NÚT TẢI
+    if 'kq_v15' in st.session_state:
         st.markdown("---")
-        st.success("✅ Đã tạo xong! Thầy kiểm tra nội dung bên dưới:")
+        st.success("✅ Đã tạo xong! Thầy kiểm tra và tải về:")
         
-        # 1. Nút tải về đặt ngay trên cùng cho tiện
-        doc_file = create_word_file(st.session_state['kq_v14'], mon, lop)
+        doc_file = create_word_file(st.session_state['kq_v15'], mon, lop)
         st.download_button(
             label="📥 TẢI ĐỀ VỀ MÁY (FILE WORD CHUẨN)",
             data=doc_file,
@@ -266,9 +247,8 @@ with col2:
             type="primary"
         )
 
-        # 2. Khung xem trước (Mở sẵn, không cần bấm expander)
         st.markdown("### 👁️ Xem trước nội dung:")
-        st.markdown(f'<div class="preview-container">{st.session_state["kq_v14"]}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="preview-container">{st.session_state["kq_v15"]}</div>', unsafe_allow_html=True)
 
 # --- FOOTER ---
 st.markdown("""
