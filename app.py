@@ -81,7 +81,7 @@ def get_selected_context(folder_path, selected_files):
             all_text += f"\n--- TÀI LIỆU: {file_name} ---\n{read_doc_text(full_path)}\n"
     return all_text
 
-# --- 4. HÀM XUẤT FILE WORD CHUẨN MẪU ---
+# --- 4. HÀM XUẤT FILE WORD CHUẨN ---
 def create_word_file(content, mon_hoc, lop_hoc):
     doc = Document()
     style = doc.styles['Normal']
@@ -142,23 +142,40 @@ def create_word_file(content, mon_hoc, lop_hoc):
     bio.seek(0)
     return bio
 
-# --- 5. HÀM AI (ĐÃ SỬA LỖI MODEL) ---
-def generate_test_v11(mon, lop, loai, context):
-    # SỬA LỖI QUAN TRỌNG: Chuyển sang dùng model 'gemini-1.5-flash' mới nhất
-    # để tránh lỗi 404 của bản cũ
+# --- 5. HÀM AI THÔNG MINH (TỰ ĐỘNG DÒ TÌM MODEL) ---
+def get_smart_model():
+    """Hàm này tự động tìm model tốt nhất đang hoạt động"""
     try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
-    except:
-        # Nếu vẫn lỗi thì thử fallback sang bản pro
-        model = genai.GenerativeModel('gemini-1.5-pro')
+        # Lấy danh sách model hỗ trợ
+        models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        
+        # Ưu tiên các model xịn nhất
+        priority = ['models/gemini-1.5-flash', 'models/gemini-1.5-pro', 'models/gemini-1.0-pro', 'models/gemini-pro']
+        
+        for p in priority:
+            if p in models:
+                return genai.GenerativeModel(p)
+        
+        # Nếu không thấy cái nào quen, lấy cái đầu tiên tìm được
+        if models:
+            return genai.GenerativeModel(models[0])
+            
+    except Exception:
+        pass
+    
+    # Đường cùng: Trả về bản mặc định (có thể lỗi nhưng đáng thử)
+    return genai.GenerativeModel('gemini-1.5-flash')
 
+def generate_test_v12(mon, lop, loai, context):
+    model = get_smart_model() # Tự động chọn model
+    
     prompt = f"""
     Vai trò: Giáo viên {mon} lớp {lop} chuyên nghiệp.
     Nhiệm vụ: Soạn đề kiểm tra "{loai}" để xuất ra file Word.
     
     TÀI LIỆU CĂN CỨ: {context}
     
-    YÊU CẦU QUAN TRỌNG VỀ ĐỊNH DẠNG (Để xuất Word đẹp):
+    YÊU CẦU QUAN TRỌNG VỀ ĐỊNH DẠNG:
     1. KHÔNG dùng bảng (table) trong đề bài.
     2. KHÔNG dùng Markdown phức tạp. Dùng I., II., 1., 2. rõ ràng.
     3. Cấu trúc đề phải gồm:
@@ -215,17 +232,17 @@ with col2:
         if not selected_files: st.error("Chưa chọn tài liệu!")
         else:
             ctx = get_selected_context(curr_dir, selected_files)
-            with st.spinner("Đang thiết lập định dạng Word..."):
+            with st.spinner("Đang tìm model phù hợp và soạn đề..."):
                 try:
-                    res = generate_test_v11(mon, lop, loai, ctx)
-                    st.session_state['kq_v11'] = res
+                    res = generate_test_v12(mon, lop, loai, ctx)
+                    st.session_state['kq_v12'] = res
                 except Exception as e: st.error(f"Lỗi: {e}")
 
-    if 'kq_v11' in st.session_state:
+    if 'kq_v12' in st.session_state:
         st.markdown("---")
         st.success("✅ Đã tạo xong! Bấm nút dưới để tải về:")
         
-        doc_file = create_word_file(st.session_state['kq_v11'], mon, lop)
+        doc_file = create_word_file(st.session_state['kq_v12'], mon, lop)
         
         st.download_button(
             label="📥 TẢI FILE WORD (.DOCX) - ĐÚNG ĐỊNH DẠNG",
@@ -236,7 +253,7 @@ with col2:
         )
         
         with st.expander("Xem trước nội dung thô:"):
-            st.markdown(st.session_state['kq_v11'])
+            st.markdown(st.session_state['kq_v12'])
 
 # --- FOOTER ---
 st.markdown("""
