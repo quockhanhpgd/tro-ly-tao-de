@@ -10,17 +10,23 @@ import PyPDF2
 # --- 1. CẤU HÌNH TRANG ---
 st.set_page_config(layout="wide", page_title="Tạo Đề Thi 2026 - Thầy Khánh", page_icon="📝")
 
-# --- CSS GIAO DIỆN (KHÔI PHỤC VỀ CHUẨN CŨ) ---
+# --- CSS GIAO DIỆN (CHUẨN TIMES NEW ROMAN - GIAO DIỆN CỔ ĐIỂN) ---
 st.markdown("""
 <style>
-    html, body, [class*="css"] { font-family: 'Times New Roman', serif !important; }
+    /* Ép toàn bộ web dùng font Times New Roman */
+    html, body, [class*="css"] {
+        font-family: 'Times New Roman', Times, serif !important;
+    }
     
+    /* Tiêu đề đỏ đậm chất giáo dục */
     .main-header {
-        font-size: 32px; font-weight: 900; color: #cc0000; text-align: center;
-        text-transform: uppercase; margin-top: 20px; margin-bottom: 20px;
+        font-size: 34px; font-weight: 900; color: #cc0000; 
+        text-align: center; text-transform: uppercase;
+        margin-top: 20px; margin-bottom: 20px;
         text-shadow: 1px 1px 2px #ddd;
     }
     
+    /* Footer xanh lá cây */
     .footer {
         position: fixed; left: 0; bottom: 0; width: 100%;
         background-color: #006633; color: white; text-align: center;
@@ -28,13 +34,7 @@ st.markdown("""
         font-weight: bold;
     }
     
-    /* Khung xem trước giống bản cũ */
-    .preview-box {
-        border: 2px solid #006633; border-radius: 5px; padding: 20px;
-        background-color: white; margin-top: 20px; min-height: 300px;
-        font-family: 'Times New Roman';
-    }
-    
+    /* Nút bấm màu đỏ */
     .stButton>button {
         background-color: #cc0000; color: white; font-size: 18px; font-weight: bold;
         width: 100%; height: 50px; border-radius: 8px; border: 1px solid white;
@@ -43,14 +43,12 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. KẾT NỐI API ---
+# --- 2. KẾT NỐI API (TỪ SECRETS) ---
 try:
     if "GOOGLE_API_KEY" in st.secrets:
         genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
     else:
-        # Dự phòng nếu chạy offline
-        API_KEY_DU_PHONG = "AIzaSy_MÃ_API_CỦA_THẦY_VÀO_ĐÂY" 
-        genai.configure(api_key=API_KEY_DU_PHONG)
+        st.warning("⚠️ Chưa nhập API Key trong Secrets.")
 except: pass
 
 # --- 3. CÁC HÀM XỬ LÝ FILE ---
@@ -85,8 +83,8 @@ def get_selected_context(folder_path, selected_files):
         full_path = os.path.join(folder_path, file_name)
         if os.path.exists(full_path):
             content = read_doc_text(full_path)
-            # Giới hạn nội dung mỗi file để tránh quá tải AI
-            all_text += f"\n--- TÀI LIỆU: {file_name} ---\n{content[:10000]}\n" 
+            # Giới hạn nội dung để tránh treo máy (Quan trọng)
+            all_text += f"\n--- TÀI LIỆU: {file_name} ---\n{content[:20000]}\n" 
     return all_text
 
 def create_word_file(content, mon_hoc, lop_hoc):
@@ -96,7 +94,7 @@ def create_word_file(content, mon_hoc, lop_hoc):
     font.name = 'Times New Roman'
     font.size = Pt(13)
     
-    # Header chuẩn
+    # Header chuẩn mẫu
     table = doc.add_table(rows=1, cols=2)
     table.autofit = False
     table.columns[0].width = Inches(2.5)
@@ -139,9 +137,9 @@ def create_word_file(content, mon_hoc, lop_hoc):
     bio.seek(0)
     return bio
 
-# --- 4. HÀM AI THÔNG MINH (CHỐNG TREO) ---
-def generate_test_v18(mon, lop, loai, context):
-    # Cấu hình an toàn
+# --- 4. HÀM AI THÔNG MINH (PHIÊN BẢN MỚI NHẤT 2026) ---
+def generate_test_v19(mon, lop, loai, context):
+    # Tắt bộ lọc an toàn để tránh lỗi "Finish Reason 1"
     safety_settings = [
         {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
         {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
@@ -149,32 +147,34 @@ def generate_test_v18(mon, lop, loai, context):
         {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
     ]
     
-    # Ưu tiên Flash (nhanh), nếu lỗi thì qua Pro
-    models_priority = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro']
+    # Dùng model 'gemini-1.5-flash' (Nhanh và ổn định nhất hiện nay)
+    # Nếu lỗi, tự động chuyển sang 'gemini-1.5-pro'
+    models_to_try = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro']
     
-    for m in models_priority:
+    for m in models_to_try:
         try:
             model = genai.GenerativeModel(m, safety_settings=safety_settings)
             prompt = f"""
-            Vai trò: Giáo viên {mon} lớp {lop}.
+            Vai trò: Giáo viên {mon} lớp {lop} chuyên nghiệp.
             Nhiệm vụ: Soạn đề kiểm tra "{loai}" để xuất ra file Word.
             TÀI LIỆU CĂN CỨ: {context}
             YÊU CẦU:
-            1. Soạn đề gồm: PHẦN I. TRẮC NGHIỆM, PHẦN II. TỰ LUẬN, PHẦN III. ĐÁP ÁN.
+            1. Cấu trúc đề: PHẦN I. TRẮC NGHIỆM, PHẦN II. TỰ LUẬN, PHẦN III. ĐÁP ÁN.
             2. Nội dung bám sát tài liệu. Không dùng bảng biểu.
+            3. Trình bày rõ ràng các câu hỏi.
             """
             response = model.generate_content(prompt)
             if response.text: return response.text
         except:
             continue
             
-    return "Hệ thống đang bận. Thầy vui lòng bấm nút tạo lại lần nữa nhé!"
+    return "Hệ thống đang quá tải. Thầy vui lòng F5 và thử lại nhé!"
 
-# --- 5. GIAO DIỆN CHÍNH ---
+# --- 5. GIAO DIỆN CHÍNH (ĐÚNG NHƯ THẦY YÊU CẦU) ---
 st.markdown('<div class="main-header">ỨNG DỤNG TẠO ĐỀ KIỂM TRA THÔNG MINH</div>', unsafe_allow_html=True)
 st.markdown("""
 <div style="background:#fff5f5; border:1px solid #cc0000; padding:10px; margin-bottom:20px; text-align:center;">
-    <marquee style="color:#cc0000; font-weight:bold; font-size:18px;">🌸 CUNG CHÚC TÂN XUÂN CHÀO NĂM BÍNH NGỌ 2026 🌸</marquee>
+    <marquee style="color:#cc0000; font-weight:bold; font-size:18px;">🌸 CUNG CHÚC TÂN XUÂN CHÀO NĂM BÍNH NGỌ 2026 - CHÚC QUÝ THẦY CÔ VÀ CÁC EM HỌC SINH NĂM MỚI THÀNH CÔNG RỰC RỠ 🌸</marquee>
 </div>""", unsafe_allow_html=True)
 
 col1, col2 = st.columns([1, 2])
@@ -216,18 +216,18 @@ with col2:
         if not selected_files: st.error("Chưa chọn tài liệu!")
         else:
             ctx = get_selected_context(curr_dir, selected_files)
-            with st.spinner("Đang soạn đề... (Vui lòng đợi 10-20 giây)"):
+            with st.spinner("Đang soạn đề..."):
                 try:
-                    res = generate_test_v18(mon, lop, loai, ctx)
-                    st.session_state['kq_v18'] = res
+                    res = generate_test_v19(mon, lop, loai, ctx)
+                    st.session_state['kq_v19'] = res
                 except Exception as e: st.error(f"Lỗi: {e}")
 
-    # HIỂN THỊ KẾT QUẢ & NÚT TẢI
-    if 'kq_v18' in st.session_state:
+    # KẾT QUẢ & NÚT TẢI
+    if 'kq_v19' in st.session_state:
         st.markdown("---")
         st.success("✅ Đã tạo xong! Thầy kiểm tra và tải về:")
         
-        doc_file = create_word_file(st.session_state['kq_v18'], mon, lop)
+        doc_file = create_word_file(st.session_state['kq_v19'], mon, lop)
         st.download_button(
             label="📥 TẢI ĐỀ VỀ MÁY (.DOCX)",
             data=doc_file,
@@ -236,8 +236,8 @@ with col2:
             type="primary"
         )
 
-        st.markdown("### 👁️ Xem trước nội dung:")
-        st.markdown(f'<div class="preview-box">{st.session_state["kq_v18"]}</div>', unsafe_allow_html=True)
+        with st.expander("👁️ Xem trước nội dung thô", expanded=True):
+            st.write(st.session_state['kq_v19'])
 
 # --- FOOTER ---
 st.markdown("""
