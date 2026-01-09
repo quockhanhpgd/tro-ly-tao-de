@@ -6,6 +6,7 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from io import BytesIO
 import os
 import PyPDF2
+import time
 
 # --- 1. CẤU HÌNH TRANG ---
 st.set_page_config(layout="wide", page_title="Tạo Đề Thi 2026 - Thầy Khánh", page_icon="📝")
@@ -26,6 +27,17 @@ st.markdown("""
         font-weight: bold;
     }
     .section-title { color: #006633; font-weight: bold; font-size: 18px; border-bottom: 2px solid #006633; margin-bottom: 15px; }
+    
+    /* Khung xem trước nội dung đề thi */
+    .preview-container {
+        border: 2px solid #006633;
+        border-radius: 10px;
+        padding: 20px;
+        background-color: white;
+        margin-top: 20px;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    
     .stButton>button {
         background-color: #cc0000; color: white; font-size: 20px; font-weight: bold;
         width: 100%; height: 55px; border-radius: 8px; border: 1px solid white;
@@ -35,9 +47,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- 2. CẤU HÌNH API ---
-# Thầy dán mã API vào đây
 API_KEY_DU_PHONG = "AIzaSy_MÃ_API_CỦA_THẦY_VÀO_ĐÂY"
-
 try:
     if "GOOGLE_API_KEY" in st.secrets:
         api_key = st.secrets["GOOGLE_API_KEY"]
@@ -141,9 +151,17 @@ def create_word_file(content, mon_hoc, lop_hoc):
     bio.seek(0)
     return bio
 
-# --- 5. HÀM AI (ĐÃ CẤU HÌNH TẮT BỘ LỌC AN TOÀN) ---
-def generate_test_v13(mon, lop, loai, context):
-    # Cấu hình tắt toàn bộ bộ lọc an toàn để tránh lỗi "Finish Reason 1"
+# --- 5. HÀM AI THÔNG MINH (CƠ CHẾ THỬ SAI 3 LỚP) ---
+def generate_test_v14(mon, lop, loai, context):
+    # Danh sách các model để thử (Ưu tiên mới nhất -> Cũ hơn)
+    models_to_try = [
+        'gemini-1.5-flash', 
+        'gemini-1.5-pro', 
+        'gemini-1.0-pro', 
+        'gemini-pro'
+    ]
+    
+    # Cấu hình tắt bộ lọc an toàn
     safety_settings = [
         {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
         {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
@@ -151,33 +169,35 @@ def generate_test_v13(mon, lop, loai, context):
         {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
     ]
     
-    # Ưu tiên dùng model Flash mới nhất
-    model = genai.GenerativeModel('gemini-1.5-flash', safety_settings=safety_settings)
-
-    prompt = f"""
-    Vai trò: Giáo viên {mon} lớp {lop} chuyên nghiệp.
-    Nhiệm vụ: Soạn đề kiểm tra "{loai}" để xuất ra file Word.
-    TÀI LIỆU CĂN CỨ: {context}
-    YÊU CẦU:
-    1. Cấu trúc đề: PHẦN I. TRẮC NGHIỆM, PHẦN II. TỰ LUẬN, PHẦN III. ĐÁP ÁN.
-    2. Không dùng bảng, không dùng Markdown phức tạp.
-    3. Nội dung bám sát tài liệu.
-    """
+    last_error = ""
     
-    try:
-        response = model.generate_content(prompt)
-        # Kiểm tra xem có nội dung không
-        if response.text:
-            return response.text
-        else:
-            return "AI đã trả về kết quả rỗng. Vui lòng thử lại."
-    except Exception as e:
-        # Nếu lỗi model Flash, thử fallback về Pro
+    for model_name in models_to_try:
         try:
-            model_bk = genai.GenerativeModel('gemini-pro', safety_settings=safety_settings)
-            return model_bk.generate_content(prompt).text
-        except:
-            return f"Lỗi khởi tạo: {str(e)}"
+            # Khởi tạo model
+            model = genai.GenerativeModel(model_name, safety_settings=safety_settings)
+            
+            prompt = f"""
+            Vai trò: Giáo viên {mon} lớp {lop}.
+            Nhiệm vụ: Soạn đề kiểm tra "{loai}" để xuất ra file Word.
+            TÀI LIỆU CĂN CỨ: {context}
+            YÊU CẦU:
+            1. Cấu trúc đề: PHẦN I. TRẮC NGHIỆM, PHẦN II. TỰ LUẬN, PHẦN III. ĐÁP ÁN.
+            2. Không dùng bảng.
+            3. Nội dung bám sát tài liệu.
+            """
+            
+            # Gọi AI tạo nội dung
+            response = model.generate_content(prompt)
+            if response.text:
+                return response.text # Thành công thì trả về ngay
+                
+        except Exception as e:
+            # Nếu lỗi thì lưu lại và thử cái tiếp theo
+            last_error = str(e)
+            continue
+            
+    # Nếu thử hết mà vẫn không được
+    return f"Hệ thống đang quá tải hoặc lỗi kết nối. Chi tiết lỗi: {last_error}"
 
 # --- 6. GIAO DIỆN CHÍNH ---
 st.markdown('<div class="main-header">ỨNG DỤNG TẠO ĐỀ KIỂM TRA THÔNG MINH</div>', unsafe_allow_html=True)
@@ -225,28 +245,30 @@ with col2:
         if not selected_files: st.error("Chưa chọn tài liệu!")
         else:
             ctx = get_selected_context(curr_dir, selected_files)
-            with st.spinner("Đang soạn đề (Đã tắt bộ lọc an toàn)..."):
+            with st.spinner("Đang tìm model phù hợp và soạn đề..."):
                 try:
-                    res = generate_test_v13(mon, lop, loai, ctx)
-                    st.session_state['kq_v13'] = res
-                except Exception as e: st.error(f"Lỗi hệ thống: {e}")
+                    res = generate_test_v14(mon, lop, loai, ctx)
+                    st.session_state['kq_v14'] = res
+                except Exception as e: st.error(f"Lỗi: {e}")
 
-    if 'kq_v13' in st.session_state:
+    # --- PHẦN HIỂN THỊ KẾT QUẢ (XEM TRƯỚC RỒI MỚI TẢI) ---
+    if 'kq_v14' in st.session_state:
         st.markdown("---")
-        st.success("✅ Đã tạo xong! Bấm nút dưới để tải về:")
+        st.success("✅ Đã tạo xong! Thầy kiểm tra nội dung bên dưới:")
         
-        doc_file = create_word_file(st.session_state['kq_v13'], mon, lop)
-        
+        # 1. Nút tải về đặt ngay trên cùng cho tiện
+        doc_file = create_word_file(st.session_state['kq_v14'], mon, lop)
         st.download_button(
-            label="📥 TẢI FILE WORD (.DOCX) - ĐÚNG ĐỊNH DẠNG",
+            label="📥 TẢI ĐỀ VỀ MÁY (FILE WORD CHUẨN)",
             data=doc_file,
             file_name=f"De_{mon}_{lop}_{loai}.docx",
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             type="primary"
         )
-        
-        with st.expander("Xem trước nội dung thô:"):
-            st.markdown(st.session_state['kq_v13'])
+
+        # 2. Khung xem trước (Mở sẵn, không cần bấm expander)
+        st.markdown("### 👁️ Xem trước nội dung:")
+        st.markdown(f'<div class="preview-container">{st.session_state["kq_v14"]}</div>', unsafe_allow_html=True)
 
 # --- FOOTER ---
 st.markdown("""
