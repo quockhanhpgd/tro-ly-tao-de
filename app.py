@@ -1,60 +1,36 @@
 import streamlit as st
 import google.generativeai as genai
 from docx import Document
-import PyPDF2
+from docx.shared import Pt, Inches
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from io import BytesIO
 import os
-from io import BytesIO # Thư viện để xử lý file Word trong bộ nhớ
+import PyPDF2
 
 # --- 1. CẤU HÌNH TRANG ---
 st.set_page_config(layout="wide", page_title="Tạo Đề Thi 2026 - Thầy Khánh", page_icon="📝")
 
-# --- CSS TÙY CHỈNH (GIAO DIỆN & FONT CHỮ) ---
+# --- CSS GIAO DIỆN ---
 st.markdown("""
 <style>
-    /* Ép toàn bộ web dùng font Times New Roman */
-    html, body, [class*="css"] {
-        font-family: 'Times New Roman', Times, serif !important;
-    }
-    
-    /* Chỉnh tiêu đề chính */
+    html, body, [class*="css"] { font-family: 'Times New Roman', serif !important; }
     .main-header {
-        font-size: 36px; 
-        font-weight: 900; 
-        color: #cc0000; 
-        text-align: center; 
-        text-transform: uppercase;
-        margin-top: 40px;
-        margin-bottom: 20px; 
-        text-shadow: 1px 1px 2px #ddd;
-        line-height: 1.8;
-        padding: 10px 0;
+        font-size: 36px; font-weight: 900; color: #cc0000; text-align: center;
+        text-transform: uppercase; margin-top: 40px; margin-bottom: 20px;
+        text-shadow: 1px 1px 2px #ddd; line-height: 1.8;
     }
-
-    /* Footer cố định */
     .footer {
         position: fixed; left: 0; bottom: 0; width: 100%;
         background-color: #006633; color: white; text-align: center;
-        padding: 10px; font-size: 14px; z-index: 9999;
+        padding: 10px; font-size: 14px; z-index: 9999; border-top: 3px solid #FFD700;
         font-weight: bold;
-        line-height: 1.5;
-        border-top: 3px solid #FFD700;
     }
-    
-    /* Các tiêu đề mục con */
-    .section-title {
-        color: #006633; font-weight: bold; font-size: 18px;
-        border-bottom: 2px solid #006633; margin-bottom: 15px; padding-bottom: 5px;
-    }
-    
-    /* Nút tạo đề (Màu đỏ) */
+    .section-title { color: #006633; font-weight: bold; font-size: 18px; border-bottom: 2px solid #006633; margin-bottom: 15px; }
     .stButton>button {
         background-color: #cc0000; color: white; font-size: 20px; font-weight: bold;
         width: 100%; height: 55px; border-radius: 8px; border: 1px solid white;
     }
     .stButton>button:hover { background-color: #b30000; border-color: #FFD700; }
-    
-    /* Nút tải về (Màu xanh dương - Sẽ được CSS tự động nhận diện) */
-    
 </style>
 """, unsafe_allow_html=True)
 
@@ -65,11 +41,9 @@ try:
         api_key = st.secrets["GOOGLE_API_KEY"]
     else:
         api_key = API_KEY_DU_PHONG
-except:
-    api_key = API_KEY_DU_PHONG
+except: api_key = API_KEY_DU_PHONG
 
-try:
-    genai.configure(api_key=api_key)
+try: genai.configure(api_key=api_key)
 except: pass
 
 # --- 3. HÀM XỬ LÝ FILE ---
@@ -96,7 +70,7 @@ def read_doc_text(file_path):
             with open(file_path, 'rb') as f:
                 reader = PyPDF2.PdfReader(f)
                 for page in reader.pages: text += page.extract_text()
-    except Exception as e: return f"Lỗi đọc file: {e}"
+    except: return ""
     return text
 
 def get_selected_context(folder_path, selected_files):
@@ -107,130 +81,169 @@ def get_selected_context(folder_path, selected_files):
             all_text += f"\n--- TÀI LIỆU: {file_name} ---\n{read_doc_text(full_path)}\n"
     return all_text
 
-# --- HÀM TẠO FILE WORD ĐỂ TẢI VỀ ---
-def create_word_file(content):
+# --- 4. HÀM XUẤT FILE WORD CHUẨN MẪU (NÂNG CẤP) ---
+def create_word_file(content, mon_hoc, lop_hoc):
     doc = Document()
-    doc.add_heading('ĐỀ KIỂM TRA (Tạo bởi Trợ lý AI)', 0)
-    doc.add_paragraph(content)
     
-    # Lưu vào bộ nhớ đệm
+    # Cài đặt phông chữ mặc định Times New Roman
+    style = doc.styles['Normal']
+    font = style.font
+    font.name = 'Times New Roman'
+    font.size = Pt(13)
+    
+    # --- PHẦN 1: HEADER (QUỐC HIỆU & TÊN TRƯỜNG) ---
+    table = doc.add_table(rows=1, cols=2)
+    table.autofit = False
+    table.columns[0].width = Inches(2.5)
+    table.columns[1].width = Inches(3.5)
+    
+    # Cột trái: Phòng/Trường
+    cell_1 = table.cell(0, 0)
+    p1 = cell_1.paragraphs[0]
+    r1 = p1.add_run(f"PHÒNG GD&ĐT HUYỆN........\nTRƯỜNG TH HUA NGUỐNG\n-------")
+    r1.bold = True
+    r1.font.size = Pt(11)
+    r1.font.name = 'Times New Roman'
+    p1.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    
+    # Cột phải: Tên đề thi
+    cell_2 = table.cell(0, 1)
+    p2 = cell_2.paragraphs[0]
+    r2 = p2.add_run(f"ĐỀ KIỂM TRA CHẤT LƯỢNG\nMÔN: {mon_hoc.upper()} - {lop_hoc.upper()}\nNăm học: 2025 - 2026")
+    r2.bold = True
+    r2.font.size = Pt(11)
+    r2.font.name = 'Times New Roman'
+    p2.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    
+    doc.add_paragraph() # Khoảng cách
+    
+    # Khung họ tên
+    p_info = doc.add_paragraph(f"Họ và tên:................................................................Lớp:....................")
+    p_info.runs[0].font.name = 'Times New Roman'
+    p_info.runs[0].font.size = Pt(13)
+    
+    doc.add_paragraph("-------------------------------------------------------------------------------------------------------------------------------")
+
+    # --- PHẦN 2: NỘI DUNG ĐỀ THI (XỬ LÝ THÔNG MINH) ---
+    lines = content.split('\n')
+    for line in lines:
+        line = line.strip()
+        if not line: continue
+        
+        # Xử lý các dấu ** do AI sinh ra
+        clean_line = line.replace("**", "")
+        
+        p = doc.add_paragraph()
+        run = p.add_run(clean_line)
+        run.font.name = 'Times New Roman'
+        run.font.size = Pt(13)
+        
+        # Tự động In đậm các dòng Tiêu đề (I., II., Câu, Phần)
+        if line.startswith(("Câu", "Bài", "PHẦN", "I.", "II.", "III.", "A.", "B.")):
+            run.bold = True
+            p.space_before = Pt(6) # Cách đoạn trên 1 chút cho thoáng
+        
+        # Nếu là tên đề bài thì ra giữa
+        if line.startswith("ĐỀ BÀI") or line.startswith("ĐỀ KIỂM TRA"):
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            run.bold = True
+            run.font.size = Pt(14)
+
+    # Lưu file
     bio = BytesIO()
     doc.save(bio)
     bio.seek(0)
     return bio
 
-# --- 4. HÀM AI ---
-def get_best_model():
-    try:
-        models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        return models[0] if models else 'gemini-pro'
-    except: return 'gemini-pro'
-
-def generate_test_v9(mon, lop, loai, context):
-    model_name = get_best_model()
-    model = genai.GenerativeModel(model_name)
+# --- 5. HÀM AI ---
+def generate_test_v10(mon, lop, loai, context):
+    model = genai.GenerativeModel('gemini-pro')
     prompt = f"""
-    Vai trò: Giáo viên bộ môn {mon} lớp {lop}.
-    Nhiệm vụ: Soạn đề kiểm tra "{loai}".
+    Vai trò: Giáo viên {mon} lớp {lop} chuyên nghiệp.
+    Nhiệm vụ: Soạn đề kiểm tra "{loai}" để xuất ra file Word.
+    
     TÀI LIỆU CĂN CỨ: {context}
-    YÊU CẦU:
-    1. Tuân thủ 100% Ma trận/Đề minh họa (nếu có).
-    2. Nếu không có ma trận: 40% Trắc nghiệm, 60% Tự luận.
-    KẾT QUẢ TRẢ VỀ (Trình bày rõ ràng để copy vào Word):
-    - Phần I: MA TRẬN ĐỀ
-    - Phần II: ĐỀ BÀI
-    - Phần III: HƯỚNG DẪN CHẤM VÀ ĐÁP ÁN
+    
+    YÊU CẦU QUAN TRỌNG VỀ ĐỊNH DẠNG (Để xuất Word đẹp):
+    1. KHÔNG dùng bảng (table) trong đề bài.
+    2. KHÔNG dùng Markdown phức tạp. Dùng I., II., 1., 2. rõ ràng.
+    3. Cấu trúc đề phải gồm:
+       - PHẦN I. TRẮC NGHIỆM
+       - PHẦN II. TỰ LUẬN
+       - PHẦN III. ĐÁP ÁN VÀ HƯỚNG DẪN CHẤM
+    4. Nội dung câu hỏi phải chính xác, bám sát tài liệu.
     """
     return model.generate_content(prompt).text
 
-# --- 5. GIAO DIỆN CHÍNH ---
-
-# 5.1 TIÊU ĐỀ
+# --- 6. GIAO DIỆN CHÍNH ---
 st.markdown('<div class="main-header">ỨNG DỤNG TẠO ĐỀ KIỂM TRA THÔNG MINH</div>', unsafe_allow_html=True)
-
-# 5.2 CHỮ CHẠY
 st.markdown("""
-<div style="background-color: #fff5f5; border: 1px solid #cc0000; padding: 5px; margin-bottom: 20px; border-radius: 5px;">
-    <marquee direction="left" scrollamount="8" style="font-size: 18px; font-weight: bold; color: #cc0000;">
-        🌸 CUNG CHÚC TÂN XUÂN CHÀO NĂM BÍNH NGỌ 2026 - CHÚC QUÝ THẦY CÔ VÀ CÁC EM HỌC SINH MỘT NĂM MỚI AN KHANG THỊNH VƯỢNG 🌸
-    </marquee>
-</div>
-""", unsafe_allow_html=True)
+<div style="background:#fff5f5; border:1px solid #cc0000; padding:10px; margin-bottom:20px; text-align:center;">
+    <marquee style="color:#cc0000; font-weight:bold; font-size:18px;">🌸 CUNG CHÚC TÂN XUÂN CHÀO NĂM BÍNH NGỌ 2026 🌸</marquee>
+</div>""", unsafe_allow_html=True)
 
 col1, col2 = st.columns([1, 2])
 
 with col1:
-    st.markdown('<div class="section-title">1. THIẾT LẬP KHO DỮ LIỆU</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-title">1. KHO DỮ LIỆU</div>', unsafe_allow_html=True)
     cap = st.selectbox("Cấp học", ["Tiểu Học", "THCS", "THPT"])
     lop = st.selectbox("Lớp", [f"Lớp {i}" for i in range(1, 13)], index=2)
     mon = st.selectbox("Môn học", ["Tin học", "Toán", "Tiếng Việt", "Khoa Học", "Lịch Sử"])
-    
     curr_dir = get_folder_path(cap, lop, mon)
-    st.caption(f"📂 Đang mở kho: {cap} > {lop} > {mon}")
+    st.caption(f"📂 Kho: {cap}/{lop}/{mon}")
     
     st.markdown("---")
-    st.markdown('**📤 Tải tài liệu (Ma trận/Đề cũ) vào đây:**')
-    uploads = st.file_uploader("Upload", accept_multiple_files=True, label_visibility="collapsed")
+    uploads = st.file_uploader("Tải tài liệu lên kho:", accept_multiple_files=True)
     if uploads:
         for f in uploads: save_uploaded_file(f, curr_dir)
-        st.success("Đã lưu xong!")
+        st.success("Đã lưu!")
 
 with col2:
     st.markdown('<div class="section-title">2. CHỌN TÀI LIỆU & TẠO ĐỀ</div>', unsafe_allow_html=True)
+    files = [f for f in os.listdir(curr_dir) if f.endswith(('.docx', '.pdf', '.txt'))]
     
-    files_in_dir = [f for f in os.listdir(curr_dir) if f.endswith(('.docx', '.pdf', '.txt'))]
-    
-    if not files_in_dir:
-        st.warning("⚠️ Kho trống. Vui lòng tải tài liệu bên cột trái.")
+    if not files:
+        st.warning("⚠️ Kho trống. Hãy tải tài liệu bên trái.")
         selected_files = []
     else:
-        # A. DANH SÁCH CHECKBOX (Gọn gàng)
-        st.write("🔽 **Tích chọn tài liệu muốn dùng:**")
+        st.write("▼ **Tích chọn tài liệu cần dùng:**")
         with st.container(border=True):
-            cols_check = st.columns(2)
+            cols = st.columns(2)
             selected_files = []
-            for i, file_name in enumerate(files_in_dir):
-                with cols_check[i % 2]:
-                    if st.checkbox(f"📄 {file_name}", value=True, key=f"chk_{i}"):
-                        selected_files.append(file_name)
-        
-        if not selected_files:
-            st.error("🛑 Thầy chưa chọn file nào cả!")
-
-    # B. CẤU HÌNH & NÚT BẤM
-    st.write("---")
-    loai = st.selectbox("Loại đề thi", ["15 Phút", "Giữa Học Kỳ 1", "Cuối Học Kỳ 1", "Giữa Học Kỳ 2", "Cuối Học Kỳ 2"])
+            for i, f in enumerate(files):
+                with cols[i%2]:
+                    if st.checkbox(f"📄 {f}", True, key=f"c_{i}"): selected_files.append(f)
     
-    st.write("")
+    st.write("---")
+    loai = st.selectbox("Loại đề:", ["15 Phút", "Giữa Kỳ 1", "Cuối Kỳ 1", "Giữa Kỳ 2", "Cuối Kỳ 2"])
+    
     if st.button("🚀 BẮT ĐẦU TẠO ĐỀ NGAY"):
-        if not selected_files:
-            st.error("Vui lòng tích chọn tài liệu trước!")
+        if not selected_files: st.error("Chưa chọn tài liệu!")
         else:
-            context = get_selected_context(curr_dir, selected_files)
-            with st.spinner("AI đang soạn đề..."):
+            ctx = get_selected_context(curr_dir, selected_files)
+            with st.spinner("Đang thiết lập định dạng Word..."):
                 try:
-                    res = generate_test_v9(mon, lop, loai, context)
-                    st.session_state['kq_v9'] = res
-                except Exception as e:
-                    st.error(f"Lỗi: {e}")
+                    res = generate_test_v10(mon, lop, loai, ctx)
+                    st.session_state['kq_v10'] = res
+                except Exception as e: st.error(f"Lỗi: {e}")
 
-    # C. HIỂN THỊ KẾT QUẢ & NÚT TẢI VỀ
-    if 'kq_v9' in st.session_state:
+    if 'kq_v10' in st.session_state:
         st.markdown("---")
-        st.success("✅ Đã tạo xong! Thầy có thể xem bên dưới hoặc tải về:")
+        st.success("✅ Đã tạo xong! Bấm nút dưới để tải về:")
         
-        # --- NÚT TẢI VỀ FILE WORD ---
-        doc_file = create_word_file(st.session_state['kq_v9'])
+        # TẠO FILE WORD CHUẨN
+        doc_file = create_word_file(st.session_state['kq_v10'], mon, lop)
+        
         st.download_button(
-            label="📥 TẢI ĐỀ VỀ (FILE WORD)",
+            label="📥 TẢI FILE WORD (.DOCX) - ĐÚNG ĐỊNH DẠNG",
             data=doc_file,
-            file_name="De_Kiem_Tra_AI.docx",
+            file_name=f"De_{mon}_{lop}_{loai}.docx",
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            type="primary" # Nút nổi bật
+            type="primary"
         )
         
-        # Hiển thị nội dung
-        st.container(border=True).markdown(st.session_state['kq_v9'])
+        with st.expander("Xem trước nội dung thô:"):
+            st.markdown(st.session_state['kq_v10'])
 
 # --- FOOTER ---
 st.markdown("""
