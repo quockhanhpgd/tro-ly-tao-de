@@ -63,7 +63,7 @@ st.markdown("""
 
 # --- 2. CẤU HÌNH API ---
 # Thay mã API thật của thầy vào dòng dưới (giữ nguyên dấu ngoặc kép)
-API_KEY_DU_PHONG = "AIzaSy_MÃ_API_CỦA_THẦY_VÀO_ĐÂY"
+API_KEY_DU_PHONG = "AIzaSyDzSvjpY3Jdq8HpZsa0mwaHq2Q57wb7o44"
 
 try:
     if "GOOGLE_API_KEY" in st.secrets:
@@ -228,3 +228,4 @@ st.markdown("""
     Trường Tiểu học Hua Nguống - Điện Biên.
 </div>
 """, unsafe_allow_html=True)
+
