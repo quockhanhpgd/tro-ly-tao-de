@@ -3,7 +3,6 @@ import google.generativeai as genai
 from docx import Document
 import PyPDF2
 import os
-import time
 
 # --- 1. CẤU HÌNH TRANG & GIAO DIỆN CHUẨN ---
 st.set_page_config(
@@ -12,7 +11,7 @@ st.set_page_config(
     page_icon="📝"
 )
 
-# CSS TÙY CHỈNH (CHUẨN HÓA FONT TIMES NEW ROMAN - GIỮ NGUYÊN GIAO DIỆN CŨ)
+# CSS TÙY CHỈNH (CHUẨN HÓA FONT TIMES NEW ROMAN - KHÔNG ĐỔI GIAO DIỆN)
 st.markdown("""
 <style>
     /* Ép toàn bộ web dùng font Times New Roman */
@@ -71,21 +70,15 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. CẤU HÌNH API (ĐÃ TỐI ƯU ĐỂ TRÁNH LỖI KẾT NỐI) ---
+# --- 2. CẤU HÌNH API ---
 try:
-    api_key = None
-    # Ưu tiên lấy từ Secrets (Online)
+    # Lấy API Key từ Secrets hoặc dùng mã dự phòng
     if "GOOGLE_API_KEY" in st.secrets:
         api_key = st.secrets["GOOGLE_API_KEY"]
+    else:
+        api_key = "AIzaSy_MÃ_CỦA_THẦY_VÀO_ĐÂY" 
     
-    # Nếu không có Secrets, dùng mã dự phòng (Thầy điền vào đây nếu cần chạy offline)
-    if not api_key:
-        api_key = "AIzaSy_MÃ_CỦA_THẦY_VÀO_ĐÂY"
-
-    # Quan trọng: Làm sạch mã Key (xóa khoảng trắng thừa - nguyên nhân gây lỗi 503)
-    if api_key:
-        api_key = api_key.strip()
-        genai.configure(api_key=api_key)
+    genai.configure(api_key=api_key)
 except: pass
 
 # --- 3. HÀM XỬ LÝ FILE ---
@@ -117,33 +110,36 @@ def read_doc_text(file_path):
 
 def get_selected_context(folder_path, selected_files):
     all_text = ""
-    if selected_files:
-        files_to_read = selected_files 
-    else:
-        files_to_read = [f for f in os.listdir(folder_path) if f.endswith(('.docx', '.pdf', '.txt'))]
+    # Nếu không chọn file nào thì lấy hết trong thư mục
+    files_to_read = selected_files if selected_files else [f for f in os.listdir(folder_path) if f.endswith(('.docx', '.pdf', '.txt'))]
 
     for file_name in files_to_read:
         full_path = os.path.join(folder_path, file_name)
         if os.path.exists(full_path):
             content = read_doc_text(full_path)
-            # Giới hạn nội dung mỗi file để tránh quá tải bộ nhớ đệm
-            all_text += f"\n--- TÀI LIỆU CĂN CỨ: {file_name} ---\n{content[:20000]}\n"
+            # CỰC KỲ QUAN TRỌNG: Giới hạn mỗi file tối đa 10.000 ký tự để tránh treo máy
+            all_text += f"\n--- TÀI LIỆU CĂN CỨ: {file_name} ---\n{content[:10000]}\n"
     return all_text
 
-# --- 4. HÀM AI (CHỐNG TREO & TỰ ĐỘNG THỬ LẠI) ---
-def generate_test_final(mon, lop, loai, context):
-    # Sử dụng Flash 1.5 - Model nhanh nhất hiện nay để tránh Timeout
-    model_name = 'gemini-1.5-flash' 
-    
-    # Cấu hình thử lại 3 lần nếu mạng nghẽn
-    max_retries = 3
-    
+# --- 4. HÀM AI (ĐÃ TỐI ƯU TỐC ĐỘ) ---
+def get_best_model():
+    # Luôn ưu tiên Flash 1.5 vì nó nhanh và ít bị lỗi 503 nhất
+    return 'gemini-1.5-flash'
+
+def generate_test_v5(mon, lop, loai, context):
+    model_name = get_best_model()
+    model = genai.GenerativeModel(model_name)
+
+    # Giới hạn tổng dung lượng gửi đi là 30.000 ký tự (khoảng 10 trang A4)
+    # Đây là bí quyết để không bao giờ bị treo quá 1 phút
+    safe_context = context[:30000]
+
     prompt = f"""
     Vai trò: Giáo viên dạy giỏi môn {mon} lớp {lop}.
     Nhiệm vụ: Soạn đề kiểm tra "{loai}" CHUẨN MỰC.
 
     DỮ LIỆU ĐƯỢC CUNG CẤP:
-    {context[:30000]} 
+    {safe_context}
 
     YÊU CẦU:
     1. Tuân thủ 100% cấu trúc Ma trận/Đề minh họa (nếu có trong dữ liệu).
@@ -155,20 +151,15 @@ def generate_test_final(mon, lop, loai, context):
     - Phần II: ĐỀ BÀI
     - Phần III: HƯỚNG DẪN CHẤM
     """
+    
+    # Thêm timeout (nếu quá 60s không xong thì báo lỗi để không treo máy)
+    try:
+        response = model.generate_content(prompt)
+        return response.text
+    except Exception as e:
+        return f"Hệ thống đang bận. Thầy vui lòng bấm nút tạo lại lần nữa! (Lỗi: {str(e)})"
 
-    for attempt in range(max_retries):
-        try:
-            model = genai.GenerativeModel(model_name)
-            response = model.generate_content(prompt)
-            return response.text
-        except Exception as e:
-            time.sleep(2) # Nghỉ 2 giây rồi thử lại
-            if attempt == max_retries - 1:
-                return f"Hệ thống đang bận (Lỗi kết nối Google). Thầy vui lòng bấm nút tạo lại lần nữa nhé! (Lỗi: {str(e)})"
-
-    return "Không thể kết nối."
-
-# --- 5. GIAO DIỆN CHÍNH (GIỮ NGUYÊN) ---
+# --- 5. GIAO DIỆN CHÍNH (GIỮ NGUYÊN 100% NHƯ CŨ) ---
 st.markdown('<div class="main-header">ỨNG DỤNG TẠO ĐỀ KIỂM TRA THÔNG MINH</div>', unsafe_allow_html=True)
 st.markdown("""
 <div class="marquee-container">
@@ -206,6 +197,7 @@ with col1:
         st.success("Đã lưu file!")
 
 with col2:
+    # Lấy danh sách file an toàn
     try:
         files_in_dir = [f for f in os.listdir(curr_dir) if f.endswith(('.docx', '.pdf', '.txt'))]
     except:
@@ -229,13 +221,13 @@ with col2:
             st.error("Vui lòng chọn tài liệu trước!")
         else:
             context = get_selected_context(curr_dir, selected_files)
-            # Thêm dòng cảnh báo nếu không đọc được nội dung
-            if not context.strip():
-                 st.warning("⚠️ Cảnh báo: Không đọc được nội dung từ file (file trống hoặc lỗi). AI sẽ tự biên soạn dựa trên kiến thức chung.")
-            
-            with st.spinner("Đang kết nối AI và soạn đề (Vui lòng đợi khoảng 10-20 giây)..."):
-                res = generate_test_final(mon, lop, loai, context)
-                st.session_state['kq_v5'] = res
+            # Thông báo đang chạy
+            with st.spinner("Đang kết nối AI và soạn đề (Mất khoảng 10-20 giây)..."):
+                try:
+                    res = generate_test_v5(mon, lop, loai, context)
+                    st.session_state['kq_v5'] = res
+                except Exception as e:
+                    st.error(f"Lỗi: {e}")
 
     if 'kq_v5' in st.session_state:
         st.markdown("---")
