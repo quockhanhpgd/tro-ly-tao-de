@@ -70,26 +70,15 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. CẤU HÌNH API (ĐÃ SỬA LỖI ĐỂ CHẠY OFFLINE) ---
-# DÁN MÃ API CỦA THẦY VÀO DÒNG DƯỚI ĐÂY (Trong dấu ngoặc kép)
-API_KEY_DU_PHONG = "AIzaSyCpcQO9p_rR8zt6Jk5RSYfKv0ZuE1s0lAY"
+# --- 2. CẤU HÌNH API ---
+if "GOOGLE_API_KEY" in st.secrets:
+    api_key = st.secrets["GOOGLE_API_KEY"]
+else:
+    api_key = "KEY_DU_PHONG_CUA_THAY"
 
-try:
-    # 1. Ưu tiên lấy từ Két sắt Online (nếu đang chạy trên mạng)
-    if "GOOGLE_API_KEY" in st.secrets:
-        api_key = st.secrets["GOOGLE_API_KEY"]
-    else:
-        # 2. Nếu không có trong két sắt, dùng khóa dự phòng
-        api_key = API_KEY_DU_PHONG
-except Exception:
-    # 3. Nếu đang chạy Offline (máy tính báo lỗi không tìm thấy secrets) -> Dùng khóa dự phòng ngay
-    api_key = API_KEY_DU_PHONG
-
-# Cấu hình cho Gemini
 try:
     genai.configure(api_key=api_key)
-except Exception as e:
-    st.error(f"Lỗi cấu hình API: {e}")
+except: pass
 
 # --- 3. HÀM XỬ LÝ FILE ---
 BASE_DIR = "KHO_DU_LIEU_GD"
