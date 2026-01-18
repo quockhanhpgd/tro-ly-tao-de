@@ -71,15 +71,21 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. CẤU HÌNH API ---
+# --- 2. CẤU HÌNH API (ĐÃ TỐI ƯU ĐỂ TRÁNH LỖI KẾT NỐI) ---
 try:
+    api_key = None
+    # Ưu tiên lấy từ Secrets (Online)
     if "GOOGLE_API_KEY" in st.secrets:
         api_key = st.secrets["GOOGLE_API_KEY"]
+    
+    # Nếu không có Secrets, dùng mã dự phòng (Thầy điền vào đây nếu cần chạy offline)
+    if not api_key:
+        api_key = "AIzaSy_MÃ_CỦA_THẦY_VÀO_ĐÂY"
+
+    # Quan trọng: Làm sạch mã Key (xóa khoảng trắng thừa - nguyên nhân gây lỗi 503)
+    if api_key:
+        api_key = api_key.strip()
         genai.configure(api_key=api_key)
-    else:
-        # Dự phòng cho offline (Thầy thay mã của thầy vào đây nếu chạy trên máy)
-        api_key_du_phong = "AIzaSy_MÃ_CỦA_THẦY"
-        genai.configure(api_key=api_key_du_phong)
 except: pass
 
 # --- 3. HÀM XỬ LÝ FILE ---
@@ -111,7 +117,6 @@ def read_doc_text(file_path):
 
 def get_selected_context(folder_path, selected_files):
     all_text = ""
-    # Nếu có chọn file thì dùng file chọn, nếu không thì dùng hết file trong thư mục
     if selected_files:
         files_to_read = selected_files 
     else:
@@ -120,47 +125,50 @@ def get_selected_context(folder_path, selected_files):
     for file_name in files_to_read:
         full_path = os.path.join(folder_path, file_name)
         if os.path.exists(full_path):
-            all_text += f"\n--- TÀI LIỆU CĂN CỨ: {file_name} ---\n{read_doc_text(full_path)}\n"
+            content = read_doc_text(full_path)
+            # Giới hạn nội dung mỗi file để tránh quá tải bộ nhớ đệm
+            all_text += f"\n--- TÀI LIỆU CĂN CỨ: {file_name} ---\n{content[:20000]}\n"
     return all_text
 
-# --- 4. HÀM AI (ĐÃ TỐI ƯU CHỐNG LỖI 503/TIMEOUT) ---
-def generate_test_v5_fix(mon, lop, loai, context):
-    # Ưu tiên Flash 1.5 vì tốc độ cực nhanh, tránh Timeout
+# --- 4. HÀM AI (CHỐNG TREO & TỰ ĐỘNG THỬ LẠI) ---
+def generate_test_final(mon, lop, loai, context):
+    # Sử dụng Flash 1.5 - Model nhanh nhất hiện nay để tránh Timeout
     model_name = 'gemini-1.5-flash' 
     
-    # Cấu hình thử lại (Retry) nếu mạng bị nghẽn
+    # Cấu hình thử lại 3 lần nếu mạng nghẽn
     max_retries = 3
+    
+    prompt = f"""
+    Vai trò: Giáo viên dạy giỏi môn {mon} lớp {lop}.
+    Nhiệm vụ: Soạn đề kiểm tra "{loai}" CHUẨN MỰC.
+
+    DỮ LIỆU ĐƯỢC CUNG CẤP:
+    {context[:30000]} 
+
+    YÊU CẦU:
+    1. Tuân thủ 100% cấu trúc Ma trận/Đề minh họa (nếu có trong dữ liệu).
+    2. Nếu không có mẫu: Làm 40% Trắc nghiệm, 60% Tự luận.
+    3. Trình bày rõ ràng, font chữ chuẩn.
+
+    KẾT QUẢ TRẢ VỀ:
+    - Phần I: MA TRẬN ĐỀ
+    - Phần II: ĐỀ BÀI
+    - Phần III: HƯỚNG DẪN CHẤM
+    """
+
     for attempt in range(max_retries):
         try:
             model = genai.GenerativeModel(model_name)
-            prompt = f"""
-            Vai trò: Giáo viên dạy giỏi môn {mon} lớp {lop}.
-            Nhiệm vụ: Soạn đề kiểm tra "{loai}" CHUẨN MỰC.
-
-            DỮ LIỆU ĐƯỢC CUNG CẤP:
-            {context[:30000]}  # Giới hạn ký tự để tránh lỗi quá tải
-
-            YÊU CẦU:
-            1. Tuân thủ 100% cấu trúc Ma trận/Đề minh họa (nếu có trong dữ liệu).
-            2. Nếu không có mẫu: Làm 40% Trắc nghiệm, 60% Tự luận.
-            3. Trình bày rõ ràng, font chữ chuẩn.
-
-            KẾT QUẢ TRẢ VỀ:
-            - Phần I: MA TRẬN ĐỀ
-            - Phần II: ĐỀ BÀI
-            - Phần III: HƯỚNG DẪN CHẤM
-            """
             response = model.generate_content(prompt)
             return response.text
         except Exception as e:
-            # Nếu lỗi, chờ 2 giây rồi thử lại
-            time.sleep(2)
+            time.sleep(2) # Nghỉ 2 giây rồi thử lại
             if attempt == max_retries - 1:
-                return f"Hệ thống đang bận (Lỗi 503/Timeout). Thầy vui lòng bấm nút tạo lại lần nữa nhé! Chi tiết lỗi: {str(e)}"
+                return f"Hệ thống đang bận (Lỗi kết nối Google). Thầy vui lòng bấm nút tạo lại lần nữa nhé! (Lỗi: {str(e)})"
 
     return "Không thể kết nối."
 
-# --- 5. GIAO DIỆN CHÍNH ---
+# --- 5. GIAO DIỆN CHÍNH (GIỮ NGUYÊN) ---
 st.markdown('<div class="main-header">ỨNG DỤNG TẠO ĐỀ KIỂM TRA THÔNG MINH</div>', unsafe_allow_html=True)
 st.markdown("""
 <div class="marquee-container">
@@ -221,8 +229,12 @@ with col2:
             st.error("Vui lòng chọn tài liệu trước!")
         else:
             context = get_selected_context(curr_dir, selected_files)
-            with st.spinner("Đang kết nối AI và soạn đề..."):
-                res = generate_test_v5_fix(mon, lop, loai, context)
+            # Thêm dòng cảnh báo nếu không đọc được nội dung
+            if not context.strip():
+                 st.warning("⚠️ Cảnh báo: Không đọc được nội dung từ file (file trống hoặc lỗi). AI sẽ tự biên soạn dựa trên kiến thức chung.")
+            
+            with st.spinner("Đang kết nối AI và soạn đề (Vui lòng đợi khoảng 10-20 giây)..."):
+                res = generate_test_final(mon, lop, loai, context)
                 st.session_state['kq_v5'] = res
 
     if 'kq_v5' in st.session_state:
