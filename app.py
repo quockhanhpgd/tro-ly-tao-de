@@ -72,7 +72,7 @@ st.markdown("""
 
 # --- 2. CẤU HÌNH API (ĐÃ SỬA LỖI ĐỂ CHẠY OFFLINE) ---
 # DÁN MÃ API CỦA THẦY VÀO DÒNG DƯỚI ĐÂY (Trong dấu ngoặc kép)
-API_KEY_DU_PHONG = "AIzaSyCpcQO9p_rR8zt6Jk5RSYfKv0ZuE1s0lAY"
+API_KEY_DU_PHONG = "AIzaSy_MÃ_API_CỦA_THẦY_VÀO_ĐÂY"
 
 try:
     # 1. Ưu tiên lấy từ Két sắt Online (nếu đang chạy trên mạng)
@@ -241,3 +241,4 @@ st.markdown("""
     Số điện thoại: 0389655141
 </div>
 """, unsafe_allow_html=True)
+
