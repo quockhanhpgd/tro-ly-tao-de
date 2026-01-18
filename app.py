@@ -218,29 +218,121 @@ with col2:
                     res = generate_test_v19(mon, lop, loai, ctx)
                     st.session_state['kq_v19'] = res
                 except Exception as e: st.error(f"Lỗi: {e}")
+  # ==============================================================================
+# PHẦN CODE MỚI - THẦY DÁN VÀO CUỐI FILE (THAY THẾ ĐOẠN TỪ DÒNG 222 TRỞ ĐI)
+# ==============================================================================
 
-    # KẾT QUẢ & NÚT TẢI
-    if 'kq_v19' in st.session_state:
-        st.markdown("---")
-        st.success("✅ Đã tạo xong! Thầy kiểm tra và tải về:")
-        
+def get_selected_context(curr_dir, selected_files):
+    """Hàm đọc nội dung từ file Word/PDF Thầy đã chọn"""
+    context = ""
+    for fname in selected_files:
+        path = os.path.join(curr_dir, fname)
+        try:
+            if fname.endswith(".docx"):
+                doc = Document(path)
+                text = "\n".join([p.text for p in doc.paragraphs])
+                context += f"\n--- TÀI LIỆU: {fname} ---\n{text}\n"
+            elif fname.endswith(".pdf"):
+                reader = PyPDF2.PdfReader(path)
+                text = ""
+                for page in reader.pages:
+                    text += page.extract_text() + "\n"
+                context += f"\n--- TÀI LIỆU: {fname} ---\n{text}\n"
+        except Exception as e:
+            st.error(f"❌ Không đọc được file {fname}. Lỗi: {str(e)}")
+    return context
+
+def generate_test_v19(mon, lop, loai, context):
+    """Hàm gọi Gemini để sinh đề thi"""
+    # 1. Cấu hình Model - Dùng bản Flash cho nhanh
+    model = genai.GenerativeModel('gemini-1.5-flash')
+    
+    # 2. Soạn câu lệnh (Prompt)
+    prompt = f"""
+    Đóng vai một Giáo viên Tin học giỏi (20 năm kinh nghiệm).
+    Hãy soạn một ĐỀ KIỂM TRA MÔN {mon} LỚP {lop} - LOẠI ĐỀ: {loai}.
+    
+    DỮ LIỆU ĐẦU VÀO (Kiến thức nền):
+    {context}
+    
+    YÊU CẦU CẤU TRÚC ĐỀ (Bắt buộc tuân thủ):
+    1. Thời gian: 35 phút.
+    2. Phần I: Trắc nghiệm (6-8 câu). 4 đáp án A,B,C,D.
+    3. Phần II: Tự luận/Thực hành (2-3 câu).
+    4. CÓ ĐÁP ÁN VÀ BIỂU ĐIỂM CHI TIẾT Ở CUỐI.
+    5. Trình bày Markdown rõ ràng (Dùng ## cho tiêu đề, ** cho in đậm).
+    """
+    
+    # 3. Gửi lệnh
+    try:
+        response = model.generate_content(prompt)
+        return response.text
+    except Exception as e:
+        return f"LỖI KẾT NỐI AI: {str(e)}"
+
+# --- GIAO DIỆN CHÍNH ---
+st.write("---")
+col_sel1, col_sel2 = st.columns(2)
+with col_sel1:
+    loai = st.selectbox("📌 Chọn loại đề:", ["Kiểm tra 15 Phút", "Giữa Kỳ 1", "Cuối Kỳ 1", "Giữa Kỳ 2", "Cuối Kỳ 2", "Khảo sát đầu năm"])
+with col_sel2:
+    st.info("💡 Mẹo: Chọn file 'Ma Trận' và 'SGK Tóm tắt' để đề ra chuẩn nhất.")
+
+# NÚT BẤM TẠO ĐỀ
+if st.button("🚀 BẮT ĐẦU TẠO ĐỀ NGAY", type="primary"):
+    # Kiểm tra điều kiện
+    if not api_key:
+        st.error("⚠️ QUÊN CHÌA KHÓA: Thầy chưa nhập API Key ở cột bên trái kìa!")
+    elif not selected_files:
+        st.error("⚠️ QUÊN TÀI LIỆU: Thầy chưa tích chọn file nào ở trên cả!")
+    else:
+        # Bắt đầu chạy
+        with st.status("🤖 Trợ lý đang làm việc...", expanded=True) as status:
+            st.write("1. Đang đọc tài liệu Thầy gửi...")
+            ctx = get_selected_context(curr_dir, selected_files)
+            
+            # Kiểm tra xem có đọc được chữ nào không
+            if len(ctx.strip()) < 10:
+                st.error("❌ Tài liệu rỗng! (Có thể file PDF là dạng ảnh chụp/scan nên AI không đọc được).")
+                status.update(label="Thất bại", state="error")
+            else:
+                st.write("2. Đang suy nghĩ và soạn câu hỏi (Mất khoảng 15s)...")
+                try:
+                    res = generate_test_v19(mon, lop, loai, ctx)
+                    if "LỖI KẾT NỐI AI" in res:
+                        st.error(res)
+                        status.update(label="Lỗi kết nối", state="error")
+                    else:
+                        st.session_state['kq_v19'] = res
+                        st.write("3. Hoàn tất! Đang xuất bản...")
+                        status.update(label="Xong! ✅", state="complete")
+                except Exception as e:
+                    st.error(f"Lỗi lạ: {str(e)}")
+
+# HIỂN THỊ KẾT QUẢ VÀ NÚT TẢI
+if 'kq_v19' in st.session_state:
+    st.markdown("---")
+    st.subheader(f"📄 KẾT QUẢ: {loai}")
+    st.markdown(st.session_state['kq_v19']) # Hiển thị đề lên màn hình
+    
+    st.markdown("---")
+    # Nút tải về (File .TXT an toàn nhất, không lo lỗi định dạng Word)
+    st.download_button(
+        label="📥 TẢI ĐỀ VỀ MÁY (Dạng văn bản)",
+        data=st.session_state['kq_v19'],
+        file_name=f"De_TinHoc_{loai}.txt",
+        mime="text/plain"
+    )
+    
+    # Nếu Thầy muốn tải file Word và hàm create_word_file ở trên vẫn còn
+    # thì có thể dùng nút này (Em rào lại để tránh lỗi nếu Thầy lỡ xóa mất hàm kia)
+    try:
         doc_file = create_word_file(st.session_state['kq_v19'], mon, lop)
         st.download_button(
-            label="📥 TẢI ĐỀ VỀ MÁY (.DOCX)",
+            label="📥 TẢI ĐỀ VỀ MÁY (Dạng Word đẹp)",
             data=doc_file,
-            file_name=f"De_{mon}_{lop}_{loai}.docx",
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            type="primary"
+            file_name=f"De_TinHoc_{loai}.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         )
-
-        with st.expander("👁️ Xem trước nội dung thô", expanded=True):
-            st.write(st.session_state['kq_v19'])
-
-# --- FOOTER ---
-st.markdown("""
-<div class="footer">
-    Ứng dụng tạo đề kiểm tra được tạo bởi thầy Phan Quốc Khánh và trợ lý ảo Gemini - trường Tiểu học Hua Nguống.<br>
-    Số điện thoại: 0389655141
-</div>
-""", unsafe_allow_html=True)
-
+    except:
+        st.warning("⚠️ Chức năng tải Word tạm ẩn do hàm create_word_file bị thiếu, Thầy dùng nút tải văn bản ở trên nhé!")
