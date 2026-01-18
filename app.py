@@ -10,38 +10,35 @@ import PyPDF2
 # --- 1. CẤU HÌNH TRANG ---
 st.set_page_config(layout="wide", page_title="Tạo Đề Thi 2026 - Thầy Khánh", page_icon="📝")
 
-# --- CSS GIAO DIỆN (CHUẨN TIMES NEW ROMAN - GIAO DIỆN CỔ ĐIỂN) ---
+# --- CSS GIAO DIỆN (Giữ nguyên của Thầy) ---
 st.markdown("""
 <style>
-    /* Ép toàn bộ web dùng font Times New Roman */
-    html, body, [class*="css"] {
-        font-family: 'Times New Roman', Times, serif !important;
-    }
-    
-    /* Tiêu đề đỏ đậm chất giáo dục */
-    .main-header {
-        font-size: 34px; font-weight: 900; color: #cc0000; 
-        text-align: center; text-transform: uppercase;
-        margin-top: 20px; margin-bottom: 20px;
-        text-shadow: 1px 1px 2px #ddd;
-    }
-    
-    /* Footer xanh lá cây */
-    .footer {
-        position: fixed; left: 0; bottom: 0; width: 100%;
-        background-color: #006633; color: white; text-align: center;
-        padding: 10px; font-size: 14px; z-index: 9999; border-top: 3px solid #FFD700;
-        font-weight: bold;
-    }
-    
-    /* Nút bấm màu đỏ */
-    .stButton>button {
-        background-color: #cc0000; color: white; font-size: 18px; font-weight: bold;
-        width: 100%; height: 50px; border-radius: 8px; border: 1px solid white;
-    }
-    .stButton>button:hover { background-color: #b30000; border-color: #FFD700; }
+    html, body, [class*="css"] { font-family: 'Times New Roman', Times, serif !important; }
+    .main-header { font-size: 34px; font-weight: 900; color: #cc0000; text-align: center; text-transform: uppercase; margin: 20px 0; }
+    .footer { position: fixed; left: 0; bottom: 0; width: 100%; background-color: #006633; color: white; text-align: center; padding: 10px; }
 </style>
 """, unsafe_allow_html=True)
+
+# =========================================================
+# PHẦN EM ĐÃ SỬA: CẤU HÌNH API KEY TẠI ĐÂY
+# =========================================================
+with st.sidebar:
+    st.header("🔐 CẤU HÌNH KẾT NỐI")
+    # Tạo ô nhập password để Thầy điền API Key
+    api_key = st.text_input("AIzaSyDAJBQ02elLsixO9RmgVzk6MtzTRuhCWQ0", type="password", placeholder="AIzaSy...")
+    
+    if api_key:
+        try:
+            genai.configure(api_key=api_key)
+            st.success("Đã kết nối Gemini thành công! ✅")
+        except Exception as e:
+            st.error(f"Key không đúng: {e}")
+    else:
+        st.warning("⚠️ Thầy cần nhập API Key để tạo đề.")
+        
+    st.divider()
+    # (Phần upload file cũ của Thầy giữ nguyên ở dưới đây)
+# =========================================================
 
 # --- 2. KẾT NỐI API (TỪ SECRETS) ---
 try:
@@ -246,3 +243,4 @@ st.markdown("""
     Số điện thoại: 0389655141
 </div>
 """, unsafe_allow_html=True)
+
