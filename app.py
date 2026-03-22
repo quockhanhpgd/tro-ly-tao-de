@@ -1,8 +1,9 @@
 import streamlit as st
-from google import genai
+import google.generativeai as genai
 from docx import Document
 import PyPDF2
 import os
+import time
 
 # --- 1. CẤU HÌNH TRANG & GIAO DIỆN CHUẨN ---
 st.set_page_config(
@@ -11,7 +12,7 @@ st.set_page_config(
     page_icon="📝"
 )
 
-# CSS TÙY CHỈNH (CHUẨN HÓA FONT TIMES NEW ROMAN)
+# CSS TÙY CHỈNH (CHUẨN HÓA FONT TIMES NEW ROMAN - GIỮ NGUYÊN GIAO DIỆN CŨ)
 st.markdown("""
 <style>
     /* Ép toàn bộ web dùng font Times New Roman */
@@ -21,6 +22,7 @@ st.markdown("""
     
     /* Khoảng trống phía trên */
     .block-container { padding-top: 2rem !important; padding-bottom: 5rem !important; }
+    
     /* Tiêu đề chính */
     .main-header {
         font-size: 32px; font-weight: 900; color: #cc0000; 
@@ -39,12 +41,14 @@ st.markdown("""
         white-space: nowrap; animation: marquee 25s linear infinite;
     }
     @keyframes marquee { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
+    
     /* Tiêu đề mục */
     .section-header {
         font-size: 20px; font-weight: bold; color: #006633;
         border-bottom: 2px solid #006633; margin-top: 20px; margin-bottom: 10px;
         padding-bottom: 5px;
     }
+    
     /* Hướng dẫn sử dụng */
     .guide-box {
         background-color: #f4fcf6; border: 1px solid #006633;
@@ -67,16 +71,17 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. CẤU HÌNH API (SỬ DỤNG THƯ VIỆN MỚI CỦA GOOGLE) ---
-if "GOOGLE_API_KEY" in st.secrets:
-    api_key = st.secrets["GOOGLE_API_KEY"]
-else:
-    api_key = "KEY_DU_PHONG_CUA_THAY"
-
+# --- 2. CẤU HÌNH API ---
 try:
-    client = genai.Client(api_key=api_key)
-except: 
-    client = None
+    if "GOOGLE_API_KEY" in st.secrets:
+        api_key = st.secrets["GOOGLE_API_KEY"]
+    else:
+        api_key = "" # Không dùng Key phụ nữa để tránh lỗi
+        
+    if api_key:
+        genai.configure(api_key=api_key.strip())
+except Exception as e: 
+    pass
 
 # --- 3. HÀM XỬ LÝ FILE ---
 BASE_DIR = "KHO_DU_LIEU_GD"
@@ -112,14 +117,21 @@ def get_selected_context(folder_path, selected_files):
     for file_name in files_to_read:
         full_path = os.path.join(folder_path, file_name)
         if os.path.exists(full_path):
-            all_text += f"\n--- TÀI LIỆU CĂN CỨ: {file_name} ---\n{read_doc_text(full_path)}\n"
+            content = read_doc_text(full_path)
+            all_text += f"\n--- TÀI LIỆU CĂN CỨ: {file_name} ---\n{content[:20000]}\n"
     return all_text
 
-# --- 4. HÀM AI (LÕI MỚI - SIÊU TỐC ĐỘ) ---
-def generate_test_v5(mon, lop, loai, context):
-    if client is None:
-        return "Lỗi: Không kết nối được API. Vui lòng kiểm tra lại mã Key."
-        
+# --- 4. HÀM AI (CƠ CHẾ DÒ TÌM MODEL TỰ ĐỘNG CHỐNG LỖI 404) ---
+def generate_test_smart(mon, lop, loai, context):
+    # Danh sách các tên gọi dự phòng của Google
+    models_to_try = [
+        'gemini-1.5-flash-latest',
+        'gemini-1.5-flash',
+        'gemini-1.5-pro',
+        'gemini-pro',
+        'gemini-1.0-pro'
+    ]
+    
     prompt = f"""
     Vai trò: Giáo viên dạy giỏi môn {mon} lớp {lop}.
     Nhiệm vụ: Soạn đề kiểm tra "{loai}" CHUẨN MỰC.
@@ -130,23 +142,30 @@ def generate_test_v5(mon, lop, loai, context):
     YÊU CẦU:
     1. Tuân thủ 100% cấu trúc Ma trận/Đề minh họa (nếu có trong dữ liệu).
     2. Nếu không có mẫu: Làm 40% Trắc nghiệm, 60% Tự luận.
-    3. Trình bày rõ ràng, font chữ chuẩn.
+    3. Trình bày rõ ràng, không dùng bảng biểu phức tạp.
 
-    KẾT QUẢ TRẢ VỀ:
+    KẾT QUẢ TRẢ VỀ CHỈ HIỂN THỊ VĂN BẢN:
     - Phần I: MA TRẬN ĐỀ
     - Phần II: ĐỀ BÀI
     - Phần III: HƯỚNG DẪN CHẤM
     """
-    try:
-        response = client.models.generate_content(
-            model='gemini-1.5-flash',
-            contents=prompt
-        )
-        return response.text
-    except Exception as e:
-        return f"Hệ thống đang bận. Lỗi chi tiết: {str(e)}"
+    
+    last_error = ""
+    
+    # AI sẽ tự động thử lần lượt từng model, cái nào không bị 404 thì lấy luôn
+    for model_name in models_to_try:
+        try:
+            model = genai.GenerativeModel(model_name)
+            response = model.generate_content(prompt)
+            if response.text:
+                return response.text
+        except Exception as e:
+            last_error = str(e)
+            continue # Lỗi 404 thì bỏ qua, thử tên tiếp theo ngay lập tức
+            
+    return f"Không thể ra đề do Google cập nhật hệ thống. Lỗi chi tiết: {last_error}"
 
-# --- 5. GIAO DIỆN CHÍNH ---
+# --- 5. GIAO DIỆN CHÍNH (GIỮ NGUYÊN 100% THEO YÊU CẦU) ---
 st.markdown('<div class="main-header">ỨNG DỤNG TẠO ĐỀ KIỂM TRA THÔNG MINH</div>', unsafe_allow_html=True)
 st.markdown("""
 <div class="marquee-container">
@@ -180,50 +199,4 @@ with col1:
     st.info("📤 Tải tài liệu vào kho")
     uploads = st.file_uploader("Chọn file...", accept_multiple_files=True, label_visibility="collapsed")
     if uploads:
-        for f in uploads: save_uploaded_file(f, curr_dir)
-        st.success("Đã lưu file!")
-
-with col2:
-    try:
-        files_in_dir = [f for f in os.listdir(curr_dir) if f.endswith(('.docx', '.pdf', '.txt'))]
-    except:
-        files_in_dir = []
-
-    st.markdown(f'<div class="section-header">2. LỰA CHỌN TÀI LIỆU TỪ KHO ({mon} - {lop})</div>', unsafe_allow_html=True)
-
-    if not files_in_dir:
-        st.warning("⚠️ Kho trống. Hãy tải tài liệu lên ở cột bên trái.")
-        selected_files = []
-    else:
-        st.write("Chọn tài liệu để ra đề:")
-        selected_files = st.multiselect("Danh sách:", options=files_in_dir, default=files_in_dir, format_func=lambda x: f"📄 {x}")
-
-    st.markdown('<div class="section-header">3. CẤU HÌNH & TẠO ĐỀ</div>', unsafe_allow_html=True)
-    loai = st.selectbox("Loại đề thi", ["15 Phút", "Giữa Học Kỳ 1", "Cuối Học Kỳ 1", "Giữa Học Kỳ 2", "Cuối Học Kỳ 2"], label_visibility="collapsed")
-
-    st.write("")
-    if st.button("🚀 BẮT ĐẦU TẠO ĐỀ NGAY"):
-        if not selected_files:
-            st.error("Vui lòng chọn tài liệu trước!")
-        else:
-            context = get_selected_context(curr_dir, selected_files)
-            with st.spinner("Đang kết nối AI và soạn đề... (Vui lòng đợi 10-20 giây)"):
-                try:
-                    res = generate_test_v5(mon, lop, loai, context)
-                    st.session_state['kq_v5'] = res
-                except Exception as e:
-                    st.error(f"Lỗi: {e}")
-
-    if 'kq_v5' in st.session_state:
-        st.markdown("---")
-        st.success("✅ Đề thi đã tạo xong:")
-        with st.container(border=True):
-            st.markdown(st.session_state['kq_v5'])
-
-# --- FOOTER ---
-st.markdown("""
-<div class="footer">
-    Ứng dụng tạo đề kiểm tra được tạo bởi thầy Phan Quốc Khánh và trợ lý ảo Gemini - Trường Tiểu học Hua Nguống.<br>
-    Số điện thoại: 0389655141
-</div>
-""", unsafe_allow_html=True)
+        for f in uploads: save_uploaded_
