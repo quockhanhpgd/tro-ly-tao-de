@@ -199,4 +199,51 @@ with col1:
     st.info("📤 Tải tài liệu vào kho")
     uploads = st.file_uploader("Chọn file...", accept_multiple_files=True, label_visibility="collapsed")
     if uploads:
-        for f in uploads: save_uploaded_
+        for f in uploads: save_uploaded_file(f, curr_dir)
+        st.success("Đã lưu file!")
+
+with col2:
+    try:
+        files_in_dir = [f for f in os.listdir(curr_dir) if f.endswith(('.docx', '.pdf', '.txt'))]
+    except:
+        files_in_dir = []
+
+    st.markdown(f'<div class="section-header">2. LỰA CHỌN TÀI LIỆU TỪ KHO ({mon} - {lop})</div>', unsafe_allow_html=True)
+
+    if not files_in_dir:
+        st.warning("⚠️ Kho trống. Hãy tải tài liệu lên ở cột bên trái.")
+        selected_files = []
+    else:
+        st.write("Chọn tài liệu để ra đề:")
+        selected_files = st.multiselect("Danh sách:", options=files_in_dir, default=files_in_dir, format_func=lambda x: f"📄 {x}")
+
+    st.markdown('<div class="section-header">3. CẤU HÌNH & TẠO ĐỀ</div>', unsafe_allow_html=True)
+    loai = st.selectbox("Loại đề thi", ["15 Phút", "Giữa Học Kỳ 1", "Cuối Học Kỳ 1", "Giữa Học Kỳ 2", "Cuối Học Kỳ 2"], label_visibility="collapsed")
+
+    st.write("")
+    if st.button("🚀 BẮT ĐẦU TẠO ĐỀ NGAY"):
+        if not selected_files:
+            st.error("Vui lòng chọn tài liệu trước!")
+        else:
+            context = get_selected_context(curr_dir, selected_files)
+            with st.spinner("Đang tự động chọn Model AI tốt nhất và soạn đề (Vui lòng đợi 10-20 giây)..."):
+                try:
+                    res = generate_test_smart(mon, lop, loai, context)
+                    st.session_state['kq_smart'] = res
+                except Exception as e:
+                    st.error(f"Lỗi: {e}")
+
+    # CHỈ HIỂN THỊ KẾT QUẢ, KHÔNG CÓ NÚT TẢI
+    if 'kq_smart' in st.session_state:
+        st.markdown("---")
+        st.success("✅ Đề thi đã tạo xong:")
+        with st.container(border=True):
+            st.markdown(st.session_state['kq_smart'])
+
+# --- FOOTER ---
+st.markdown("""
+<div class="footer">
+    Ứng dụng tạo đề kiểm tra được tạo bởi thầy Phan Quốc Khánh và trợ lý ảo Gemini - Trường Tiểu học Hua Nguống.<br>
+    Số điện thoại: 0389655141
+</div>
+""", unsafe_allow_html=True)
