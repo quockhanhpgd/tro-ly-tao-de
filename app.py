@@ -96,11 +96,10 @@ def get_selected_context(folder_path, selected_files):
         full_path = os.path.join(folder_path, file_name)
         if os.path.exists(full_path):
             content = read_doc_text(full_path)
-            # Giới hạn 30000 ký tự để máy chủ xử lý mượt mà
             all_text += f"\n--- TÀI LIỆU CĂN CỨ: {file_name} ---\n{content[:30000]}\n"
     return all_text
 
-# --- 4. HÀM AI (CHỐT CỨNG BẢN ỔN ĐỊNH NHẤT) ---
+# --- 4. HÀM AI (CƠ CHẾ TỰ ĐỘNG LẤY DANH SÁCH BẢN QUYỀN TỪ GOOGLE) ---
 def generate_test_final(mon, lop, loai, context):
     if not client: 
         return "Lỗi: Không kết nối được API. Thầy vui lòng kiểm tra lại mã Key trong phần Secrets."
@@ -123,22 +122,38 @@ def generate_test_final(mon, lop, loai, context):
     - Phần III: HƯỚNG DẪN CHẤM
     """
     
-    # CHỈ sử dụng duy nhất bản ổn định này, không dùng bản thử nghiệm nữa
-    model_name = 'gemini-1.5-flash'
-    last_error = ""
-    
-    # Cho phép thử lại 3 lần nếu mạng chập chờn
-    for attempt in range(3):
-        try:
-            response = client.models.generate_content(model=model_name, contents=prompt)
-            if response.text: 
-                return response.text
-        except Exception as e:
-            last_error = str(e)
-            time.sleep(2) # Nghỉ 2 giây rồi tự động thử lại
-            continue 
+    try:
+        # BƯỚC 1: Gọi lệnh ListModels để xin danh sách các model hợp lệ
+        available_models = []
+        for m in client.models.list():
+            if 'gemini' in m.name.lower():
+                available_models.append(m.name)
+        
+        if not available_models:
+            return "Lỗi: Mã Key của Thầy hiện không được Google cấp quyền sử dụng AI Gemini. Thầy vui lòng tạo một mã Key mới nhé!"
             
-    return f"Hệ thống đang bận. Thầy vui lòng thử lại nhé! Lỗi chi tiết: {last_error}"
+        # BƯỚC 2: Ưu tiên chọn các bản Flash vì nó ra đề cực nhanh
+        model_to_use = available_models[0] # Chọn đại bản đầu tiên làm dự phòng
+        for m in available_models:
+            if 'flash' in m.name.lower():
+                model_to_use = m
+                break
+                
+        # BƯỚC 3: Ra đề bằng đúng model đã được cấp phép
+        for attempt in range(3):
+            try:
+                response = client.models.generate_content(model=model_to_use, contents=prompt)
+                if response.text: 
+                    return response.text
+            except Exception as e:
+                if attempt == 2:
+                    return f"Lỗi khi chạy bộ não {model_to_use}. Chi tiết: {str(e)}"
+                time.sleep(2) # Nghỉ 2 giây rồi thử lại
+                
+    except Exception as main_e:
+        return f"Lỗi kiểm tra bản quyền hệ thống: {str(main_e)}"
+        
+    return "Hệ thống đang bận. Thầy vui lòng F5 và tạo lại nhé!"
 
 # --- 5. GIAO DIỆN CHÍNH ---
 st.markdown('<div class="main-header">ỨNG DỤNG TẠO ĐỀ KIỂM TRA THÔNG MINH</div>', unsafe_allow_html=True)
@@ -184,7 +199,7 @@ with col2:
             st.error("Vui lòng chọn tài liệu trước!")
         else:
             context = get_selected_context(curr_dir, selected_files)
-            with st.spinner("Đang kết nối Trí tuệ nhân tạo và soạn đề (Vui lòng đợi 10-20 giây)..."):
+            with st.spinner("Đang kiểm tra bản quyền AI và tự động soạn đề (Vui lòng đợi khoảng 15 giây)..."):
                 res = generate_test_final(mon, lop, loai, context)
                 st.session_state['kq_final'] = res
 
