@@ -100,7 +100,7 @@ def get_selected_context(folder_path, selected_files):
             all_text += f"\n--- TÀI LIỆU CĂN CỨ: {file_name} ---\n{content[:30000]}\n"
     return all_text
 
-# --- 4. HÀM AI (FIX LỖI 404 VÀ LỖI MODULE) ---
+# --- 4. HÀM AI (CHỐT CỨNG 1 MODEL VÀ TỰ ĐỘNG THỬ LẠI) ---
 def generate_test_final(mon, lop, loai, context):
     if not client: 
         return "Lỗi: Không kết nối được API. Thầy vui lòng kiểm tra lại mã Key trong phần Secrets."
@@ -123,20 +123,21 @@ def generate_test_final(mon, lop, loai, context):
     - Phần III: HƯỚNG DẪN CHẤM
     """
     
-    # Chốt danh sách model đời mới nhất, loại bỏ hoàn toàn các bản cũ gây lỗi
-    models_to_try = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro']
+    # Ép buộc chỉ dùng duy nhất bản flash (không bị lỗi 404 cho tài khoản thường)
+    model_name = 'gemini-1.5-flash'
     last_error = ""
     
-    for m in models_to_try:
+    # Cho phép hệ thống thử lại 3 lần nếu mạng bị nghẽn (thay vì nhảy model)
+    for attempt in range(3):
         try:
-            response = client.models.generate_content(model=m, contents=prompt)
+            response = client.models.generate_content(model=model_name, contents=prompt)
             if response.text: return response.text
         except Exception as e:
             last_error = str(e)
-            time.sleep(1) # Nghỉ 1 giây tránh nghẽn mạng
+            time.sleep(2) # Nghỉ 2 giây trước khi thử lại
             continue 
             
-    return f"Hệ thống đang quá tải hoặc cấu hình API Key chưa tương thích. Lỗi chi tiết: {last_error}"
+    return f"Hệ thống đang hơi bận một chút. Thầy vui lòng bấm nút tạo lại lần nữa nhé! Lỗi chi tiết: {last_error}"
 
 # --- 5. GIAO DIỆN CHÍNH ---
 st.markdown('<div class="main-header">ỨNG DỤNG TẠO ĐỀ KIỂM TRA THÔNG MINH</div>', unsafe_allow_html=True)
@@ -182,11 +183,11 @@ with col2:
             st.error("Vui lòng chọn tài liệu trước!")
         else:
             context = get_selected_context(curr_dir, selected_files)
-            with st.spinner("Đang kết nối Trí tuệ nhân tạo và soạn đề (Vui lòng đợi 10-20 giây)..."):
+            with st.spinner("Đang kết nối AI và phân tích tài liệu (Vui lòng đợi 10-20 giây)..."):
                 res = generate_test_final(mon, lop, loai, context)
                 st.session_state['kq_final'] = res
 
-    # KẾT QUẢ ĐẦU RA (HIỂN THỊ TRỰC TIẾP, KHÔNG NÚT TẢI)
+    # KẾT QUẢ ĐẦU RA (HIỂN THỊ TRỰC TIẾP TRÊN WEB)
     if 'kq_final' in st.session_state:
         st.markdown("---")
         st.success("✅ Đề thi đã tạo xong:")
