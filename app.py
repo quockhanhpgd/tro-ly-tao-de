@@ -99,7 +99,7 @@ def get_selected_context(folder_path, selected_files):
             all_text += f"\n--- TÀI LIỆU CĂN CỨ: {file_name} ---\n{content[:30000]}\n"
     return all_text
 
-# --- 4. HÀM AI (CƠ CHẾ TỰ ĐỘNG LẤY DANH SÁCH BẢN QUYỀN TỪ GOOGLE) ---
+# --- 4. HÀM AI (FIX LỖI STR OBJECT VÀ TỰ ĐỘNG CHỌN MODEL CHUẨN) ---
 def generate_test_final(mon, lop, loai, context):
     if not client: 
         return "Lỗi: Không kết nối được API. Thầy vui lòng kiểm tra lại mã Key trong phần Secrets."
@@ -123,23 +123,26 @@ def generate_test_final(mon, lop, loai, context):
     """
     
     try:
-        # BƯỚC 1: Gọi lệnh ListModels để xin danh sách các model hợp lệ
+        # BƯỚC 1: Lấy danh sách hợp lệ và fix lỗi string
         available_models = []
         for m in client.models.list():
-            if 'gemini' in m.name.lower():
-                available_models.append(m.name)
+            # Xử lý linh hoạt: Nếu m là chuỗi thì lấy luôn, nếu là đối tượng thì lấy thuộc tính name
+            model_name = m if isinstance(m, str) else getattr(m, 'name', str(m))
+            
+            if 'gemini' in model_name.lower():
+                available_models.append(model_name)
         
         if not available_models:
-            return "Lỗi: Mã Key của Thầy hiện không được Google cấp quyền sử dụng AI Gemini. Thầy vui lòng tạo một mã Key mới nhé!"
+            return "Lỗi: Mã Key của Thầy hiện không được Google cấp quyền sử dụng AI Gemini."
             
-        # BƯỚC 2: Ưu tiên chọn các bản Flash vì nó ra đề cực nhanh
-        model_to_use = available_models[0] # Chọn đại bản đầu tiên làm dự phòng
+        # BƯỚC 2: Chọn bản Flash an toàn nhất, tránh bản thử nghiệm (exp)
+        model_to_use = available_models[0] 
         for m in available_models:
-            if 'flash' in m.name.lower():
+            if 'flash' in m.lower() and 'exp' not in m.lower():
                 model_to_use = m
                 break
                 
-        # BƯỚC 3: Ra đề bằng đúng model đã được cấp phép
+        # BƯỚC 3: Ra đề với chế độ tự động thử lại nếu mạng nghẽn
         for attempt in range(3):
             try:
                 response = client.models.generate_content(model=model_to_use, contents=prompt)
@@ -147,13 +150,13 @@ def generate_test_final(mon, lop, loai, context):
                     return response.text
             except Exception as e:
                 if attempt == 2:
-                    return f"Lỗi khi chạy bộ não {model_to_use}. Chi tiết: {str(e)}"
-                time.sleep(2) # Nghỉ 2 giây rồi thử lại
+                    return f"Hệ thống báo lỗi khi kết nối bộ não {model_to_use}. Chi tiết: {str(e)}"
+                time.sleep(2) 
                 
     except Exception as main_e:
-        return f"Lỗi kiểm tra bản quyền hệ thống: {str(main_e)}"
+        return f"Lỗi hệ thống trong quá trình kiểm tra: {str(main_e)}"
         
-    return "Hệ thống đang bận. Thầy vui lòng F5 và tạo lại nhé!"
+    return "Hệ thống đang bận. Thầy vui lòng thử lại nhé!"
 
 # --- 5. GIAO DIỆN CHÍNH ---
 st.markdown('<div class="main-header">ỨNG DỤNG TẠO ĐỀ KIỂM TRA THÔNG MINH</div>', unsafe_allow_html=True)
