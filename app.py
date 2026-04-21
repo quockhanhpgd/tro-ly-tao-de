@@ -100,7 +100,7 @@ def get_selected_context(folder_path, selected_files):
             all_text += f"\n--- TÀI LIỆU CĂN CỨ: {file_name} ---\n{content[:30000]}\n"
     return all_text
 
-# --- 4. HÀM AI (CHỐT CỨNG 1 MODEL VÀ TỰ ĐỘNG THỬ LẠI) ---
+# --- 4. HÀM AI (DÒ TÌM PHIÊN BẢN MỚI NHẤT CHỐNG LỖI 404) ---
 def generate_test_final(mon, lop, loai, context):
     if not client: 
         return "Lỗi: Không kết nối được API. Thầy vui lòng kiểm tra lại mã Key trong phần Secrets."
@@ -123,21 +123,27 @@ def generate_test_final(mon, lop, loai, context):
     - Phần III: HƯỚNG DẪN CHẤM
     """
     
-    # Ép buộc chỉ dùng duy nhất bản flash (không bị lỗi 404 cho tài khoản thường)
-    model_name = 'gemini-1.5-flash'
+    # Cập nhật danh sách các phiên bản AI đời mới nhất để quét tự động
+    models_to_try = [
+        'gemini-2.5-flash', 
+        'gemini-2.0-flash', 
+        'gemini-1.5-flash-latest',
+        'gemini-2.0-flash-exp'
+    ]
+    
     last_error = ""
     
-    # Cho phép hệ thống thử lại 3 lần nếu mạng bị nghẽn (thay vì nhảy model)
-    for attempt in range(3):
+    for m in models_to_try:
         try:
-            response = client.models.generate_content(model=model_name, contents=prompt)
-            if response.text: return response.text
+            response = client.models.generate_content(model=m, contents=prompt)
+            if response.text: 
+                return response.text
         except Exception as e:
             last_error = str(e)
-            time.sleep(2) # Nghỉ 2 giây trước khi thử lại
+            time.sleep(1) # Nghỉ 1 giây rồi tự động thử phiên bản tiếp theo
             continue 
             
-    return f"Hệ thống đang hơi bận một chút. Thầy vui lòng bấm nút tạo lại lần nữa nhé! Lỗi chi tiết: {last_error}"
+    return f"Hệ thống không tìm thấy phiên bản AI phù hợp với tài khoản của Thầy. Lỗi chi tiết: {last_error}"
 
 # --- 5. GIAO DIỆN CHÍNH ---
 st.markdown('<div class="main-header">ỨNG DỤNG TẠO ĐỀ KIỂM TRA THÔNG MINH</div>', unsafe_allow_html=True)
@@ -183,7 +189,7 @@ with col2:
             st.error("Vui lòng chọn tài liệu trước!")
         else:
             context = get_selected_context(curr_dir, selected_files)
-            with st.spinner("Đang kết nối AI và phân tích tài liệu (Vui lòng đợi 10-20 giây)..."):
+            with st.spinner("Đang kết nối Trí tuệ nhân tạo và soạn đề (Vui lòng đợi 10-20 giây)..."):
                 res = generate_test_final(mon, lop, loai, context)
                 st.session_state['kq_final'] = res
 
