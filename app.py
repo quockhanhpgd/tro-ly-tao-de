@@ -1,5 +1,5 @@
 import streamlit as st
-import google.generativeai as genai
+from google import genai
 from docx import Document
 import PyPDF2
 import os
@@ -54,16 +54,13 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. CẤU HÌNH API ---
-try:
-    api_key = ""
-    if "GOOGLE_API_KEY" in st.secrets:
-        api_key = st.secrets["GOOGLE_API_KEY"]
-        
-    if api_key:
-        genai.configure(api_key=api_key.strip())
-except Exception as e: 
-    pass
+# --- 2. CẤU HÌNH API (THƯ VIỆN MỚI) ---
+api_key = st.secrets.get("GOOGLE_API_KEY", "")
+client = None
+if api_key:
+    try:
+        client = genai.Client(api_key=api_key.strip())
+    except: pass
 
 # --- 3. HÀM XỬ LÝ FILE ---
 BASE_DIR = "KHO_DU_LIEU_GD"
@@ -84,11 +81,10 @@ def read_doc_text(file_path):
     try:
         if file_path.endswith('.docx'):
             doc = Document(file_path)
-            text = "\n".join([para.text for para in doc.paragraphs])
+            text = "\n".join([p.text for p in doc.paragraphs if p.text.strip()])
         elif file_path.endswith('.pdf'):
             with open(file_path, 'rb') as f:
-                reader = PyPDF2.PdfReader(f)
-                for page in reader.pages: text += page.extract_text()
+                for page in PyPDF2.PdfReader(f).pages: text += page.extract_text() or ""
     except: pass
     return text
 
@@ -100,14 +96,14 @@ def get_selected_context(folder_path, selected_files):
         full_path = os.path.join(folder_path, file_name)
         if os.path.exists(full_path):
             content = read_doc_text(full_path)
-            # Giới hạn 30000 ký tự để máy chủ xử lý mượt mà, không bị treo
+            # Giới hạn 30000 ký tự để máy chủ xử lý mượt mà
             all_text += f"\n--- TÀI LIỆU CĂN CỨ: {file_name} ---\n{content[:30000]}\n"
     return all_text
 
-# --- 4. HÀM AI (LỌC BỎ CÁC BẢN AI CŨ BỊ LỖI) ---
-def generate_test_stable(mon, lop, loai, context):
-    if not api_key:
-        return "Lỗi: Không tìm thấy API Key. Thầy vui lòng kiểm tra lại phần Secrets."
+# --- 4. HÀM AI (FIX LỖI 404 VÀ LỖI MODULE) ---
+def generate_test_final(mon, lop, loai, context):
+    if not client: 
+        return "Lỗi: Không kết nối được API. Thầy vui lòng kiểm tra lại mã Key trong phần Secrets."
         
     prompt = f"""
     Vai trò: Giáo viên dạy giỏi môn {mon} lớp {lop}.
@@ -127,19 +123,17 @@ def generate_test_stable(mon, lop, loai, context):
     - Phần III: HƯỚNG DẪN CHẤM
     """
     
-    # Chỉ sử dụng các model mới nhất của Google hiện nay, loại bỏ hoàn toàn 'gemini-pro'
-    models_to_try = ['gemini-1.5-flash', 'gemini-1.5-pro']
+    # Chốt danh sách model đời mới nhất, loại bỏ hoàn toàn các bản cũ gây lỗi
+    models_to_try = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro']
     last_error = ""
     
-    for model_name in models_to_try:
+    for m in models_to_try:
         try:
-            model = genai.GenerativeModel(model_name)
-            response = model.generate_content(prompt)
-            if response.text:
-                return response.text
+            response = client.models.generate_content(model=m, contents=prompt)
+            if response.text: return response.text
         except Exception as e:
             last_error = str(e)
-            time.sleep(1) # Nghỉ 1 giây để tránh nghẽn mạng trước khi thử model tiếp theo
+            time.sleep(1) # Nghỉ 1 giây tránh nghẽn mạng
             continue 
             
     return f"Hệ thống đang quá tải hoặc cấu hình API Key chưa tương thích. Lỗi chi tiết: {last_error}"
@@ -189,18 +183,15 @@ with col2:
         else:
             context = get_selected_context(curr_dir, selected_files)
             with st.spinner("Đang kết nối Trí tuệ nhân tạo và soạn đề (Vui lòng đợi 10-20 giây)..."):
-                try:
-                    res = generate_test_stable(mon, lop, loai, context)
-                    st.session_state['kq_stable'] = res
-                except Exception as e:
-                    st.error(f"Lỗi: {e}")
+                res = generate_test_final(mon, lop, loai, context)
+                st.session_state['kq_final'] = res
 
-    # KẾT QUẢ ĐẦU RA (KHÔNG CÓ NÚT TẢI WORD)
-    if 'kq_stable' in st.session_state:
+    # KẾT QUẢ ĐẦU RA (HIỂN THỊ TRỰC TIẾP, KHÔNG NÚT TẢI)
+    if 'kq_final' in st.session_state:
         st.markdown("---")
         st.success("✅ Đề thi đã tạo xong:")
         with st.container(border=True):
-            st.markdown(st.session_state['kq_stable'])
+            st.markdown(st.session_state['kq_final'])
 
 # --- FOOTER ---
 st.markdown("""
