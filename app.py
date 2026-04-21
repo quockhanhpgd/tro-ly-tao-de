@@ -100,7 +100,7 @@ def get_selected_context(folder_path, selected_files):
             all_text += f"\n--- TÀI LIỆU CĂN CỨ: {file_name} ---\n{content[:30000]}\n"
     return all_text
 
-# --- 4. HÀM AI (DÒ TÌM PHIÊN BẢN MỚI NHẤT CHỐNG LỖI 404) ---
+# --- 4. HÀM AI (CHỐT CỨNG BẢN ỔN ĐỊNH NHẤT) ---
 def generate_test_final(mon, lop, loai, context):
     if not client: 
         return "Lỗi: Không kết nối được API. Thầy vui lòng kiểm tra lại mã Key trong phần Secrets."
@@ -123,27 +123,22 @@ def generate_test_final(mon, lop, loai, context):
     - Phần III: HƯỚNG DẪN CHẤM
     """
     
-    # Cập nhật danh sách các phiên bản AI đời mới nhất để quét tự động
-    models_to_try = [
-        'gemini-2.5-flash', 
-        'gemini-2.0-flash', 
-        'gemini-1.5-flash-latest',
-        'gemini-2.0-flash-exp'
-    ]
-    
+    # CHỈ sử dụng duy nhất bản ổn định này, không dùng bản thử nghiệm nữa
+    model_name = 'gemini-1.5-flash'
     last_error = ""
     
-    for m in models_to_try:
+    # Cho phép thử lại 3 lần nếu mạng chập chờn
+    for attempt in range(3):
         try:
-            response = client.models.generate_content(model=m, contents=prompt)
+            response = client.models.generate_content(model=model_name, contents=prompt)
             if response.text: 
                 return response.text
         except Exception as e:
             last_error = str(e)
-            time.sleep(1) # Nghỉ 1 giây rồi tự động thử phiên bản tiếp theo
+            time.sleep(2) # Nghỉ 2 giây rồi tự động thử lại
             continue 
             
-    return f"Hệ thống không tìm thấy phiên bản AI phù hợp với tài khoản của Thầy. Lỗi chi tiết: {last_error}"
+    return f"Hệ thống đang bận. Thầy vui lòng thử lại nhé! Lỗi chi tiết: {last_error}"
 
 # --- 5. GIAO DIỆN CHÍNH ---
 st.markdown('<div class="main-header">ỨNG DỤNG TẠO ĐỀ KIỂM TRA THÔNG MINH</div>', unsafe_allow_html=True)
